@@ -15,9 +15,12 @@ import Testing
 }
 
 @Test func editHistorySupportsUndoRedoAndInvalidatesRedo() {
-    let initial = EditState(trim: TrimRange(start: 0, end: 10), stabilization: .none)
-    let trimmed = EditState(trim: TrimRange(start: 1, end: 9), stabilization: .none)
-    let stabilized = EditState(trim: trimmed.trim, stabilization: .steady)
+    let initial = EditState(sourceDuration: 10, pendingTrim: TrimRange(start: 1, end: 9))
+    let trimmed = initial.committingPendingTrim()
+    let stabilized = trimmed.appending(StabilizationPass(
+        mode: .steady,
+        transformsURL: URL(fileURLWithPath: "/tmp/steady.trf")
+    ))
     var history = EditHistory()
 
     history.record(previous: initial, current: trimmed)
@@ -28,6 +31,30 @@ import Testing
 
     history.record(previous: trimmed, current: stabilized)
     #expect(!history.canRedo)
+}
+
+@Test func confirmedTrimsRebaseAndCanRepeatWithoutDroppingStabilization() {
+    var state = EditState(sourceDuration: 10, pendingTrim: TrimRange(start: 2, end: 8))
+    state = state.committingPendingTrim()
+    #expect(state.duration == 6)
+    #expect(state.pendingTrim == TrimRange(start: 0, end: 6))
+
+    let pass = StabilizationPass(
+        mode: .steady,
+        transformsURL: URL(fileURLWithPath: "/tmp/pass.trf")
+    )
+    state = state.appending(pass)
+    state.pendingTrim = TrimRange(start: 1, end: 4)
+    state = state.committingPendingTrim()
+
+    #expect(state.duration == 3)
+    #expect(state.pendingTrim == TrimRange(start: 0, end: 3))
+    #expect(state.hasStabilization)
+    #expect(state.operations == [
+        .trim(TrimRange(start: 2, end: 8)),
+        .stabilization(pass),
+        .trim(TrimRange(start: 1, end: 4)),
+    ])
 }
 
 @Test func stabilizationProfilesAreFixedAndDistinct() {
@@ -51,7 +78,8 @@ import Testing
     let profile = try #require(StabilizationProfile.profile(for: .steady))
     let arguments = FFmpegCommandFactory.analysis(
         input: input,
-        trim: TrimRange(start: 1.25, end: 8.75),
+        sourceDuration: 10,
+        operations: [.trim(TrimRange(start: 1.25, end: 8.75))],
         transforms: transforms,
         profile: profile
     )
@@ -69,13 +97,15 @@ import Testing
 }
 
 @Test func exportCommandPreservesAudioAndMetadataWithoutScaling() throws {
-    let profile = try #require(StabilizationProfile.profile(for: .naturalMotion))
+    let pass = StabilizationPass(
+        mode: .naturalMotion,
+        transformsURL: URL(fileURLWithPath: "/tmp/transforms.trf")
+    )
     let arguments = FFmpegCommandFactory.export(
         input: URL(fileURLWithPath: "/tmp/input.MP4"),
-        trim: TrimRange(start: 0, end: 9),
-        transforms: URL(fileURLWithPath: "/tmp/transforms.trf"),
+        sourceDuration: 10,
+        operations: [.trim(TrimRange(start: 0, end: 9)), .stabilization(pass)],
         output: URL(fileURLWithPath: "/tmp/output.mp4"),
-        profile: profile,
         targetVideoBitrate: 72_000_000
     )
 
@@ -85,6 +115,43 @@ import Testing
     #expect(arguments.contains("-map_metadata"))
     #expect(arguments.contains("copy"))
     #expect(!arguments.contains("-s"))
+}
+
+@Test func operationPipelinePreservesOrderingAndScopesLaterTrims() throws {
+    let first = StabilizationPass(
+        mode: .steady,
+        transformsURL: URL(fileURLWithPath: "/tmp/first.trf")
+    )
+    let second = StabilizationPass(
+        mode: .naturalMotion,
+        transformsURL: URL(fileURLWithPath: "/tmp/second.trf")
+    )
+    let operations: [EditOperation] = [
+        .trim(TrimRange(start: 2, end: 8)),
+        .stabilization(first),
+        .trim(TrimRange(start: 1, end: 4)),
+        .stabilization(second),
+    ]
+
+    let plan = FFmpegCommandFactory.pipeline(sourceDuration: 10, operations: operations)
+    #expect(plan.inputStart == 2)
+    #expect(plan.absoluteSourceStart == 3)
+    #expect(plan.duration == 3)
+    #expect(plan.filters.count == 4)
+    #expect(plan.filters[0].contains("first.trf"))
+    #expect(plan.filters[1].contains("trim=start=1.000000:end=4.000000"))
+    #expect(plan.filters[2] == "setpts=PTS-STARTPTS")
+    #expect(plan.filters[3].contains("second.trf"))
+
+    let export = FFmpegCommandFactory.export(
+        input: URL(fileURLWithPath: "/tmp/input.MP4"),
+        sourceDuration: 10,
+        operations: operations,
+        output: URL(fileURLWithPath: "/tmp/output.mp4"),
+        targetVideoBitrate: 50_000_000
+    )
+    #expect(export.filter { $0 == "/tmp/input.MP4" }.count == 2)
+    #expect(export.contains("1:a?"))
 }
 
 @Test func sessionWorkspaceOwnsAndCleansItsFiles() throws {
@@ -127,6 +194,7 @@ import Testing
 
     // Natural motion uses a 17-frame smoothing window, so a one-second/24-frame
     // slice is long enough to exercise both vid.stab passes without slowing the suite excessively.
+    let info = try await MediaInspector().inspect(url: sample)
     let profile = try #require(StabilizationProfile.profile(for: .naturalMotion))
     let trim = TrimRange(start: 0, end: 1)
     let diagnostics = DiagnosticLogStore(baseDirectory: workspace.directory)
@@ -136,7 +204,8 @@ import Testing
         executable: installation.executableURL,
         arguments: FFmpegCommandFactory.analysis(
             input: sample,
-            trim: trim,
+            sourceDuration: info.duration,
+            operations: [.trim(trim)],
             transforms: workspace.transformsURL,
             profile: profile
         ),
@@ -146,12 +215,12 @@ import Testing
     ) { _ in }
     #expect(FileManager.default.fileExists(atPath: workspace.transformsURL.path))
 
+    let pass = StabilizationPass(mode: .naturalMotion, transformsURL: workspace.transformsURL)
     var previewArguments = FFmpegCommandFactory.preview(
         input: sample,
-        trim: trim,
-        transforms: workspace.transformsURL,
-        output: workspace.previewURL,
-        profile: profile
+        sourceDuration: info.duration,
+        operations: [.trim(trim), .stabilization(pass)],
+        output: workspace.previewURL
     )
     // VideoToolbox is denied inside the Codex command sandbox. The shipping
     // command still requires it; this substitution validates the filter chain.

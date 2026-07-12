@@ -175,37 +175,40 @@ private struct LoadedEditorView: View {
 
                 TimelineView(.periodic(from: .now, by: 0.10)) { _ in
                     TrimScrubber(
-                        duration: media.duration,
-                        trim: model.editState.trim,
+                        duration: model.editState.duration,
+                        trim: model.editState.pendingTrim,
                         playhead: model.timelineTime,
                         onDraftTrim: model.setDraftTrim,
-                        onCommitTrim: model.commitTrim,
+                        onCommitTrim: model.finishTrimDrag,
                         onSeek: model.seek
                     )
                     .onChange(of: model.timelineTime) { _, _ in model.enforcePlaybackBounds() }
+                }
+
+                HStack {
+                    Text(model.editState.hasPendingTrim
+                         ? "Confirm this range before stabilization or export."
+                         : "Adjust either handle to prepare another trim.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Confirm Trim", action: model.confirmTrim)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!model.canConfirmTrim)
                 }
 
                 HStack(spacing: 24) {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("Stabilization")
                             .font(.headline)
-                        HStack(spacing: 0) {
-                            ForEach(StabilizationMode.allCases) { mode in
-                                Button(mode.title) { model.setStabilization(mode) }
-                                    .buttonStyle(.plain)
-                                    .padding(.horizontal, 13)
-                                    .padding(.vertical, 7)
-                                    .frame(maxWidth: .infinity)
-                                    .background(
-                                        model.editState.stabilization == mode
-                                            ? Color.accentColor.opacity(0.25)
-                                            : Color.clear
-                                    )
-                            }
+                        HStack {
+                            Button("Apply Steady") { model.applyStabilization(.steady) }
+                                .buttonStyle(.bordered)
+                            Button("Apply Natural Motion") { model.applyStabilization(.naturalMotion) }
+                                .buttonStyle(.bordered)
                         }
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-                        Text(stabilizationExplanation)
+                        .disabled(!model.canApplyStabilization)
+                        Text("Each completed pass is added on top of the existing edits.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -233,14 +236,6 @@ private struct LoadedEditorView: View {
     private var mediaSummary: String {
         let size = ByteCountFormatter.string(fromByteCount: media.fileSize, countStyle: .file)
         return "\(media.width)×\(media.height) · \(formatFPS(media.frameRate)) fps · \(media.videoCodec.uppercased()) · \(size)"
-    }
-
-    private var stabilizationExplanation: String {
-        switch model.editState.stabilization {
-        case .none: "Trim and compress without stabilization."
-        case .steady: "Stronger smoothing for mostly static handheld shots."
-        case .naturalMotion: "Lighter smoothing that preserves tracking pans."
-        }
     }
 
     private func export() {

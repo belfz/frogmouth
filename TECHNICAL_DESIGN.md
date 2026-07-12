@@ -4,8 +4,8 @@
 
 frogmouth is a lightweight, personal macOS video editor for wildlife footage. It edits one Canon EOS R5-style MP4 clip at a time:
 
-- trim the beginning and/or end;
-- stabilize with one of two fixed presets;
+- repeatedly trim and confirm the current working range;
+- add one or more stabilization passes using two fixed presets;
 - preview the selected stabilized result before export; and
 - export a smaller, visually comparable HEVC/H.265 MP4 while retaining the source resolution, frame rate, audio, and compatible metadata.
 
@@ -82,8 +82,9 @@ At startup, `FFmpegLocator` validates the executable. If unavailable or incompat
 ```text
 FFmpeg setup required ── install/restart ──> Empty editor
 Empty editor ── choose/drop video ──> Editing original
-Editing original ── select stabilization ──> Analyzing
-Analyzing ── proxy ready ──> Editing stabilized preview
+Editing ── adjust handles / Confirm Trim ──> Rebased editing range
+Editing ── Apply Steady/Natural Motion ──> Analyzing
+Analyzing ── proxy ready / commit pass ──> Editing stabilized preview
 Editing or preview ── Export… ──> Exporting (modal, cancellable)
 Exporting ── success/failure/cancel ──> Editing stabilized preview
 ```
@@ -93,18 +94,18 @@ Exporting ── success/failure/cancel ──> Editing stabilized preview
 - Open via an **Open Video** button and support Finder drag-and-drop. If a clip is already loaded, confirm that the user wants to discard the current session before accepting a replacement; the source file is never changed.
 - Show filename, source resolution, frame rate, duration, and source size.
 - Use an `AVPlayer` preview.
-- Use a simple labeled time scrubber: start handle, end handle, and a vertical playhead. No thumbnails.
+- Use a simple labeled time scrubber: start handle, end handle, and a vertical playhead. No thumbnails. Handle motion creates a pending trim.
+- **Confirm Trim** commits the pending range as one undoable operation, rebases it to the full scrubber width, and resets its time labels to `00:00…duration`. This can be repeated.
 - Supply play/pause (Space) and conventional time labels. Approximate QuickTime-style scrubbing is sufficient.
-- Offer a two-option stabilization control:
-  - **Steady** — stronger smoothing for mostly-static handheld shots.
-  - **Natural motion** — lighter smoothing so intentional pans and tracking retain more of their movement.
-- Show only the currently selected result. When stabilization is selected, the preview is a rendered, stabilized proxy—not a misleading simulation.
+- Offer two commit actions: **Apply Steady** for stronger smoothing and **Apply Natural Motion** for lighter smoothing that preserves tracking pans. Applying either action adds a pass on top of existing edits; repeated and mixed passes are allowed.
+- Disable stabilization and export while a trim remains unconfirmed.
+- Keep the ordered edit stack implicit in v1. Show only the current pipeline result; a stabilized preview is rendered through every committed operation, not simulated.
 - Display one export choice: **High-quality HEVC — original resolution and frame rate — smaller file**. It includes brief explanatory text that frogmouth chooses the encoding parameters automatically.
 - **Export…** always opens a normal macOS save dialog; never overwrite or generate a sibling file automatically.
 
 ### Analysis, preview, export, and cancellation
 
-Selecting/changing either trim endpoint or stabilization mode invalidates the existing transform data and preview proxy. The user can change these in any order; frogmouth performs a new analysis when required rather than constraining the workflow.
+Changing trim handles affects only the pending range. Confirming it appends a trim operation and preserves every earlier stabilization pass. It may require re-rendering the proxy, but never re-analyzes stabilization automatically. Applying a stabilization action analyzes only the current committed pipeline output and commits the new pass after its preview succeeds.
 
 Analysis and export each show a focused modal progress view with phase text, determinate progress when parseable, an indeterminate fallback, and **Cancel**. Editing is disabled while a process runs. Cancellation terminates the FFmpeg process group, waits for termination, removes only frogmouth-owned temporary files, and returns to the last valid editor state.
 
@@ -112,10 +113,10 @@ Analysis and export each show a focused modal progress view with phase text, det
 
 Keep an in-memory, current-clip-only command stack:
 
-- trim start/end changes;
-- stabilization selection changes.
+- confirmed trim operations, including the pre-confirmation handle range;
+- committed stabilization passes.
 
-Expose menu/toolbar actions and `⌘Z` / `⇧⌘Z`. Coalesce an entire handle drag into one command. Selecting a different input asks for confirmation before beginning a new session and clearing history. Undoing a change that affects render inputs invalidates its analysis/proxy cache; the UI regenerates it only when stabilization preview is requested.
+Expose menu/toolbar actions and `⌘Z` / `⇧⌘Z`. A handle drag is not history by itself; **Confirm Trim** records the whole range as one command. Undoing that command restores the previous working range and handle positions. Undoing a stabilization removes only the latest pass; redo reuses its retained transform cache. Selecting a different input asks for confirmation before beginning a new session and clearing history.
 
 ## 4. Processing design
 
@@ -125,8 +126,8 @@ Create a unique directory inside `FileManager.default.temporaryDirectory`, for e
 
 ```text
 frogmouth/<UUID>/
-  transforms.trf
-  preview.mp4
+  transforms-<pass UUID>.trf
+  preview-<render UUID>.mp4
   ffmpeg-analysis.log
   ffmpeg-preview.log
   ffmpeg-export.log
@@ -136,20 +137,20 @@ Never place temporary files beside the source. Remove the directory on normal cl
 
 ### Analysis pass
 
-Run a `vidstabdetect` pass for exactly the current trim range. This alignment is important: the generated transform file is frame-sequential, so a later trim must not reuse transforms generated for a different range.
+Run `vidstabdetect` after every previously committed trim/stabilization filter, so it sees exactly the current pipeline output. Each pass owns a distinct transform file. A later trim retains earlier transform files and is inserted after their filters; a later stabilization therefore analyzes the already-stabilized, newly trimmed result.
 
 Illustrative argument structure (construct an argument array; never invoke a shell):
 
 ```text
 ffmpeg -hide_banner -nostdin -y
-  -i <source>
-  -ss <start> -t <duration>
+  -ss <collapsed-leading-trim-start> -i <source>
   -map 0:v:0 -an
-  -vf vidstabdetect=result=<session/transforms.trf>:shakiness=<...>:accuracy=<...>:stepsize=<...>:fileformat=ascii
+  -vf <prior operation filters>,vidstabdetect=result=<session/transforms-pass.trf>:shakiness=<...>:accuracy=<...>:stepsize=<...>:fileformat=ascii
+  -t <current-pipeline-duration>
   -f null -
 ```
 
-The exact placement of seeking options and timestamp behavior must be verified against the approved FFmpeg build. The implementation must use one shared range-normalization routine for analysis, preview, and export so all three process the same frames. FFmpeg 7.1.1's binary transform writer produced files that its transform reader rejected during integration testing, so v1 deliberately uses the larger but interoperable ASCII representation.
+Leading trims before the first stabilization are collapsed into input-side seeking. Trims after a stabilization remain ordered `trim,setpts` filters so earlier motion transforms keep their original frame alignment. The same `VideoPipelinePlan` constructs analysis, preview, and export. FFmpeg 7.1.1's binary transform writer produced files that its transform reader rejected during integration testing, so v1 deliberately uses the larger but interoperable ASCII representation.
 
 Fixed profile constants are centralized in `StabilizationProfile`, not scattered through strings:
 
@@ -162,13 +163,13 @@ These are initial benchmark values, not a user-facing contract. On the supplied 
 
 ### Stabilized preview proxy
 
-After analysis, render an HEVC proxy using the exact transform file and profile. Scale only this temporary preview to an aspect-preserving width of 1024 pixels after stabilization. The final export is never downscaled.
+After analysis, render an HEVC proxy through the complete ordered operation list. Scale only this temporary preview to an aspect-preserving width of 1024 pixels. The final export is never downscaled and never uses the lossy proxy as an input.
 
 Use `AVPlayer` to play the proxy. Keep the original asset/player available while no stabilization is selected. The preview proxy intentionally omits audio if that materially improves responsiveness; the final export always retains audio unchanged. If audio is retained in the proxy, it must be copied rather than re-encoded.
 
 ### Final export
 
-The final FFmpeg invocation applies the same trim range and transform data as preview, maps video and optional audio, and writes an MP4. The output must retain:
+The final FFmpeg invocation composes all committed trims and stabilization transforms in order, maps video and optional audio, and writes an MP4. If a trim occurs after stabilization, use a separately sought audio input so copied AAC remains aligned with the final absolute source range. The output must retain:
 
 - exact source encoded dimensions and nominal frame rate (e.g. 4096×2160 at 24 fps);
 - source colour signaling, without grading, conversion, or tone mapping;
@@ -216,9 +217,10 @@ Suggested domain types:
 
 ```swift
 struct MediaInfo: Sendable { /* URL, video/audio streams, dimensions, fps, duration, bitrate, metadata */ }
-struct TrimRange: Equatable, Sendable { let start: CMTime; let end: CMTime }
+struct TrimRange: Equatable, Sendable { let start: TimeInterval; let end: TimeInterval }
 enum StabilizationMode: String, CaseIterable, Sendable { case steady, naturalMotion }
-struct EditState: Equatable, Sendable { var trim: TrimRange; var stabilization: StabilizationMode? }
+enum EditOperation: Equatable, Sendable { case trim(TrimRange); case stabilization(StabilizationPass) }
+struct EditState: Equatable, Sendable { let sourceDuration: TimeInterval; var operations: [EditOperation]; var pendingTrim: TrimRange }
 enum ProcessingPhase: Equatable { case idle, analyzing, renderingPreview, exporting, failed(FrogmouthError) }
 ```
 
@@ -266,7 +268,7 @@ User-facing errors must state what failed and what to do next: unsupported FFmpe
 1. Create a minimal Xcode SwiftUI app and local README; establish lint/test formatting.
 2. Implement FFmpeg setup screen, approved-build documentation, locator, and capability validation.
 3. Implement media inspection, source preview, and basic one-clip session lifecycle.
-4. Add the scrubber, trim range, edit state, and undo/redo.
+4. Add the scrubber, confirm/rebase trim workflow, ordered edit state, and undo/redo.
 5. Build FFmpeg process/logging infrastructure and cancellation before adding the actual filters.
 6. Implement analysis plus temporary transform lifecycle; benchmark the two profiles on the R5 sample and real wildlife clips.
 7. Render/play stabilized proxy and correctly invalidate it on edit changes.

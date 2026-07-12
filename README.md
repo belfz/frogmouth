@@ -35,6 +35,7 @@ frogmouth verifies FFmpeg only at startup. When setup is required, install the d
 - Basic colour controls: exposure, white balance, and contrast while preserving a no-adjustment default.
 - A stabilization-strength slider after preset tuning is validated.
 - Before/after comparison, a thumbnail filmstrip, and finer trim controls.
+- Expose and manage the currently implicit ordered edit-operation stack.
 - Broader, tested format-support tiers beyond Canon-style MP4.
 - A maintained supported-FFmpeg list and smoother update guidance.
 - Reconsider bundled FFmpeg only if convenience outweighs release size, licensing, update, and signing burden.

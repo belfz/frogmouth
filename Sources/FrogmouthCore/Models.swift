@@ -78,13 +78,75 @@ public enum StabilizationMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-public struct EditState: Equatable, Sendable {
-    public var trim: TrimRange
-    public var stabilization: StabilizationMode
+public struct StabilizationPass: Equatable, Sendable, Identifiable {
+    public let id: UUID
+    public let mode: StabilizationMode
+    public let transformsURL: URL
 
-    public init(trim: TrimRange, stabilization: StabilizationMode = .none) {
-        self.trim = trim
-        self.stabilization = stabilization
+    public init(id: UUID = UUID(), mode: StabilizationMode, transformsURL: URL) {
+        self.id = id
+        self.mode = mode
+        self.transformsURL = transformsURL
+    }
+}
+
+public enum EditOperation: Equatable, Sendable {
+    case trim(TrimRange)
+    case stabilization(StabilizationPass)
+}
+
+public struct EditState: Equatable, Sendable {
+    public let sourceDuration: TimeInterval
+    public var operations: [EditOperation]
+    public var pendingTrim: TrimRange
+
+    public init(
+        sourceDuration: TimeInterval,
+        operations: [EditOperation] = [],
+        pendingTrim: TrimRange? = nil
+    ) {
+        self.sourceDuration = sourceDuration
+        self.operations = operations
+        self.pendingTrim = pendingTrim ?? TrimRange(start: 0, end: sourceDuration)
+    }
+
+    public var duration: TimeInterval {
+        operations.reduce(sourceDuration) { duration, operation in
+            switch operation {
+            case let .trim(range): range.normalized(for: duration).duration
+            case .stabilization: duration
+            }
+        }
+    }
+
+    public var hasPendingTrim: Bool {
+        let fullRange = TrimRange(start: 0, end: duration)
+        return abs(pendingTrim.start - fullRange.start) > 0.000_001
+            || abs(pendingTrim.end - fullRange.end) > 0.000_001
+    }
+
+    public var hasStabilization: Bool {
+        operations.contains {
+            if case .stabilization = $0 { true } else { false }
+        }
+    }
+
+    public func committingPendingTrim() -> EditState {
+        guard hasPendingTrim else { return self }
+        let committed = pendingTrim.normalized(for: duration)
+        return EditState(
+            sourceDuration: sourceDuration,
+            operations: operations + [.trim(committed)],
+            pendingTrim: TrimRange(start: 0, end: committed.duration)
+        )
+    }
+
+    public func appending(_ pass: StabilizationPass) -> EditState {
+        EditState(
+            sourceDuration: sourceDuration,
+            operations: operations + [.stabilization(pass)],
+            pendingTrim: TrimRange(start: 0, end: duration)
+        )
     }
 }
 

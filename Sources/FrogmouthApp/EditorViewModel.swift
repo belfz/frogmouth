@@ -13,7 +13,7 @@ final class EditorViewModel: ObservableObject {
 
     @Published private(set) var ffmpegState: FFmpegState = .checking
     @Published private(set) var media: MediaInfo?
-    @Published var editState = EditState(trim: TrimRange(start: 0, end: 1))
+    @Published var editState = EditState(sourceDuration: 1)
     @Published private(set) var player = AVPlayer()
     @Published private(set) var processingPhase: ProcessingPhase = .idle
     @Published var errorMessage: String?
@@ -28,6 +28,8 @@ final class EditorViewModel: ObservableObject {
     private var history = EditHistory()
     private var pendingReplacementURL: URL?
     private var processingTask: Task<Void, Never>?
+    private var currentPreviewURL: URL?
+    private var isShowingProcessedPreview = false
     private var hasBootstrapped = false
 
     init(
@@ -44,7 +46,11 @@ final class EditorViewModel: ObservableObject {
     var isProcessing: Bool { processingPhase != .idle }
     var canUndo: Bool { history.canUndo && !isProcessing }
     var canRedo: Bool { history.canRedo && !isProcessing }
-    var canExport: Bool { media != nil && !isProcessing && ffmpegInstallation != nil }
+    var canConfirmTrim: Bool { editState.hasPendingTrim && !isProcessing }
+    var canApplyStabilization: Bool {
+        media != nil && !editState.hasPendingTrim && !isProcessing && ffmpegInstallation != nil
+    }
+    var canExport: Bool { canApplyStabilization }
     var diagnosticsDirectory: URL { diagnostics.directory }
 
     private var ffmpegInstallation: FFmpegInstallation? {
@@ -92,33 +98,107 @@ final class EditorViewModel: ObservableObject {
     }
 
     func setDraftTrim(_ trim: TrimRange) {
-        guard let media else { return }
-        editState.trim = trim.normalized(for: media.duration)
-        constrainPlayerToTrim()
+        editState.pendingTrim = trim.normalized(for: editState.duration)
+        constrainPlayerToPendingTrim()
     }
 
-    func commitTrim(from previousTrim: TrimRange) {
-        guard previousTrim != editState.trim else { return }
-        let previous = EditState(trim: previousTrim, stabilization: editState.stabilization)
-        history.record(previous: previous, current: editState)
-        objectWillChange.send()
-        invalidateRenderedPreview()
-        if editState.stabilization != .none {
-            renderStabilizedPreview()
+    func finishTrimDrag(from _: TrimRange) {
+        // Draft handle motion is intentionally not an edit operation. Confirm Trim
+        // records the whole range as one undoable action.
+    }
+
+    func confirmTrim() {
+        guard canConfirmTrim else { return }
+        let previous = editState
+        let committed = editState.committingPendingTrim()
+        history.record(previous: previous, current: committed)
+        editState = committed
+        lastExportURL = nil
+
+        if committed.hasStabilization {
+            renderExistingPipelinePreview()
+        } else {
+            showOriginalPreview()
         }
     }
 
-    func setStabilization(_ mode: StabilizationMode) {
-        guard editState.stabilization != mode else { return }
+    func applyStabilization(_ mode: StabilizationMode) {
+        guard mode != .none,
+              canApplyStabilization,
+              processingTask == nil,
+              let installation = ffmpegInstallation,
+              let media,
+              let workspace,
+              let profile = StabilizationProfile.profile(for: mode) else { return }
+
         let previous = editState
-        editState.stabilization = mode
-        history.record(previous: previous, current: editState)
-        objectWillChange.send()
-        invalidateRenderedPreview()
-        if mode == .none {
-            showOriginalPreview()
-        } else {
-            renderStabilizedPreview()
+        let passID = UUID()
+        let transformsURL = workspace.transformsURL(for: passID)
+        let pass = StabilizationPass(id: passID, mode: mode, transformsURL: transformsURL)
+        let prospective = previous.appending(pass)
+        let previewURL = workspace.previewURL()
+        let sessionID = workspace.directory.lastPathComponent
+
+        processingTask = Task { [weak self] in
+            guard let self else { return }
+            defer { processingTask = nil }
+            do {
+                processingPhase = .analyzing(progress: 0)
+                let analysisArguments = FFmpegCommandFactory.analysis(
+                    input: media.url,
+                    sourceDuration: media.duration,
+                    operations: previous.operations,
+                    transforms: transformsURL,
+                    profile: profile
+                )
+                _ = try await runner.run(
+                    executable: installation.executableURL,
+                    arguments: analysisArguments,
+                    duration: previous.duration,
+                    sessionID: sessionID,
+                    phase: "analysis-\(passID.uuidString)"
+                ) { [weak self] progress in
+                    Task { @MainActor in self?.processingPhase = .analyzing(progress: progress) }
+                }
+
+                try Task.checkCancellation()
+                processingPhase = .renderingPreview(progress: 0)
+                let previewArguments = FFmpegCommandFactory.preview(
+                    input: media.url,
+                    sourceDuration: media.duration,
+                    operations: prospective.operations,
+                    output: previewURL
+                )
+                _ = try await runner.run(
+                    executable: installation.executableURL,
+                    arguments: previewArguments,
+                    duration: prospective.duration,
+                    sessionID: sessionID,
+                    phase: "preview-\(passID.uuidString)"
+                ) { [weak self] progress in
+                    Task { @MainActor in self?.processingPhase = .renderingPreview(progress: progress) }
+                }
+
+                guard previous == editState else { throw FrogmouthError.cancelled }
+                history.record(previous: previous, current: prospective)
+                editState = prospective
+                installProcessedPreview(previewURL)
+                processingPhase = .idle
+                lastExportURL = nil
+            } catch is CancellationError {
+                processingPhase = .idle
+                try? FileManager.default.removeItem(at: transformsURL)
+                try? FileManager.default.removeItem(at: previewURL)
+            } catch let error as FrogmouthError where error == .cancelled {
+                processingPhase = .idle
+                try? FileManager.default.removeItem(at: transformsURL)
+                try? FileManager.default.removeItem(at: previewURL)
+            } catch {
+                processingPhase = .idle
+                errorMessage = error.localizedDescription
+                try? FileManager.default.removeItem(at: transformsURL)
+                try? FileManager.default.removeItem(at: previewURL)
+            }
         }
     }
 
@@ -138,15 +218,24 @@ final class EditorViewModel: ObservableObject {
             player.pause()
         } else {
             let current = timelineTime
-            if current >= editState.trim.end || current < editState.trim.start {
-                seek(to: editState.trim.start)
+            if current >= editState.pendingTrim.end || current < editState.pendingTrim.start {
+                seek(to: editState.pendingTrim.start)
             }
             player.play()
         }
     }
 
     func seek(to seconds: TimeInterval) {
-        let playerSeconds = editState.stabilization == .none ? seconds : seconds - editState.trim.start
+        let playerSeconds: TimeInterval
+        if isShowingProcessedPreview {
+            playerSeconds = seconds
+        } else {
+            let plan = FFmpegCommandFactory.pipeline(
+                sourceDuration: editState.sourceDuration,
+                operations: editState.operations
+            )
+            playerSeconds = plan.inputStart + seconds
+        }
         player.seek(
             to: CMTime(seconds: max(0, playerSeconds), preferredTimescale: 600),
             toleranceBefore: .zero,
@@ -156,96 +245,28 @@ final class EditorViewModel: ObservableObject {
 
     var timelineTime: TimeInterval {
         let seconds = player.currentTime().seconds
-        guard seconds.isFinite else { return editState.trim.start }
-        return editState.stabilization == .none ? seconds : editState.trim.start + seconds
+        guard seconds.isFinite else { return editState.pendingTrim.start }
+        if isShowingProcessedPreview { return seconds }
+        let plan = FFmpegCommandFactory.pipeline(
+            sourceDuration: editState.sourceDuration,
+            operations: editState.operations
+        )
+        return max(0, seconds - plan.inputStart)
     }
 
     func enforcePlaybackBounds() {
-        guard player.timeControlStatus == .playing, timelineTime >= editState.trim.end else { return }
+        guard player.timeControlStatus == .playing,
+              timelineTime >= editState.pendingTrim.end else { return }
         player.pause()
-        seek(to: editState.trim.end)
-    }
-
-    func renderStabilizedPreview() {
-        guard processingTask == nil,
-              let installation = ffmpegInstallation,
-              let media,
-              let workspace,
-              let profile = StabilizationProfile.profile(for: editState.stabilization) else { return }
-
-        let sessionID = workspace.directory.lastPathComponent
-        let snapshot = editState
-        workspace.removeGeneratedMedia()
-
-        processingTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                processingPhase = .analyzing(progress: 0)
-                let analysisArguments = FFmpegCommandFactory.analysis(
-                    input: media.url,
-                    trim: snapshot.trim,
-                    transforms: workspace.transformsURL,
-                    profile: profile
-                )
-                _ = try await runner.run(
-                    executable: installation.executableURL,
-                    arguments: analysisArguments,
-                    duration: snapshot.trim.duration,
-                    sessionID: sessionID,
-                    phase: "analysis"
-                ) { [weak self] progress in
-                    Task { @MainActor in self?.processingPhase = .analyzing(progress: progress) }
-                }
-
-                try Task.checkCancellation()
-                processingPhase = .renderingPreview(progress: 0)
-                let previewArguments = FFmpegCommandFactory.preview(
-                    input: media.url,
-                    trim: snapshot.trim,
-                    transforms: workspace.transformsURL,
-                    output: workspace.previewURL,
-                    profile: profile
-                )
-                _ = try await runner.run(
-                    executable: installation.executableURL,
-                    arguments: previewArguments,
-                    duration: snapshot.trim.duration,
-                    sessionID: sessionID,
-                    phase: "preview"
-                ) { [weak self] progress in
-                    Task { @MainActor in self?.processingPhase = .renderingPreview(progress: progress) }
-                }
-
-                guard snapshot == editState else { throw FrogmouthError.cancelled }
-                player.pause()
-                player = AVPlayer(url: workspace.previewURL)
-                processingPhase = .idle
-            } catch is CancellationError {
-                processingPhase = .idle
-                showOriginalPreview()
-            } catch let error as FrogmouthError where error == .cancelled {
-                processingPhase = .idle
-                showOriginalPreview()
-            } catch {
-                processingPhase = .idle
-                errorMessage = error.localizedDescription
-                showOriginalPreview()
-            }
-            processingTask = nil
-        }
+        seek(to: editState.pendingTrim.end)
     }
 
     func export(to destination: URL) {
-        guard processingTask == nil,
+        guard canExport,
+              processingTask == nil,
               let installation = ffmpegInstallation,
               let media,
               let workspace else { return }
-
-        let profile = StabilizationProfile.profile(for: editState.stabilization)
-        if profile != nil && !FileManager.default.fileExists(atPath: workspace.transformsURL.path) {
-            errorMessage = "The stabilized preview must finish before export."
-            return
-        }
 
         let snapshot = editState
         let sessionID = workspace.directory.lastPathComponent
@@ -262,16 +283,15 @@ final class EditorViewModel: ObservableObject {
                 processingPhase = .exporting(progress: 0)
                 let arguments = FFmpegCommandFactory.export(
                     input: media.url,
-                    trim: snapshot.trim,
-                    transforms: profile == nil ? nil : workspace.transformsURL,
+                    sourceDuration: media.duration,
+                    operations: snapshot.operations,
                     output: temporaryOutput,
-                    profile: profile,
                     targetVideoBitrate: QualityPolicy.targetVideoBitrate(sourceBitrate: media.videoBitrate)
                 )
                 _ = try await runner.run(
                     executable: installation.executableURL,
                     arguments: arguments,
-                    duration: snapshot.trim.duration,
+                    duration: snapshot.duration,
                     sessionID: sessionID,
                     phase: "export"
                 ) { [weak self] progress in
@@ -279,7 +299,7 @@ final class EditorViewModel: ObservableObject {
                 }
 
                 let outputInfo = try await mediaInspector.inspect(url: temporaryOutput)
-                try validate(outputInfo: outputInfo, against: media, trim: snapshot.trim)
+                try validate(outputInfo: outputInfo, against: media, duration: snapshot.duration)
                 if FileManager.default.fileExists(atPath: destination.path) {
                     _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporaryOutput)
                 } else {
@@ -325,8 +345,9 @@ final class EditorViewModel: ObservableObject {
             cleanupCurrentSession()
             workspace = newWorkspace
             media = inspected
-            editState = EditState(trim: TrimRange(start: 0, end: inspected.duration), stabilization: .none)
+            editState = EditState(sourceDuration: inspected.duration)
             history.clear()
+            isShowingProcessedPreview = false
             player = AVPlayer(url: url)
             lastExportURL = nil
             diagnostics.append(
@@ -342,35 +363,91 @@ final class EditorViewModel: ObservableObject {
 
     private func restoreEditState(_ state: EditState) {
         editState = state
-        objectWillChange.send()
-        invalidateRenderedPreview()
-        if state.stabilization == .none {
-            showOriginalPreview()
+        lastExportURL = nil
+        if state.hasStabilization {
+            renderExistingPipelinePreview()
         } else {
-            renderStabilizedPreview()
+            showOriginalPreview()
         }
     }
 
-    private func invalidateRenderedPreview() {
-        workspace?.removeGeneratedMedia()
+    private func renderExistingPipelinePreview() {
+        guard processingTask == nil,
+              let installation = ffmpegInstallation,
+              let media,
+              let workspace else { return }
+
+        let snapshot = editState
+        let previewURL = workspace.previewURL()
+        let sessionID = workspace.directory.lastPathComponent
+        processingTask = Task { [weak self] in
+            guard let self else { return }
+            defer { processingTask = nil }
+            do {
+                processingPhase = .renderingPreview(progress: 0)
+                let arguments = FFmpegCommandFactory.preview(
+                    input: media.url,
+                    sourceDuration: media.duration,
+                    operations: snapshot.operations,
+                    output: previewURL
+                )
+                _ = try await runner.run(
+                    executable: installation.executableURL,
+                    arguments: arguments,
+                    duration: snapshot.duration,
+                    sessionID: sessionID,
+                    phase: "preview-existing"
+                ) { [weak self] progress in
+                    Task { @MainActor in self?.processingPhase = .renderingPreview(progress: progress) }
+                }
+                guard snapshot == editState else { throw FrogmouthError.cancelled }
+                installProcessedPreview(previewURL)
+                processingPhase = .idle
+            } catch is CancellationError {
+                processingPhase = .idle
+                try? FileManager.default.removeItem(at: previewURL)
+            } catch let error as FrogmouthError where error == .cancelled {
+                processingPhase = .idle
+                try? FileManager.default.removeItem(at: previewURL)
+            } catch {
+                processingPhase = .idle
+                errorMessage = error.localizedDescription
+                try? FileManager.default.removeItem(at: previewURL)
+            }
+        }
+    }
+
+    private func installProcessedPreview(_ url: URL) {
+        player.pause()
+        let previousURL = currentPreviewURL
+        currentPreviewURL = url
+        isShowingProcessedPreview = true
+        player = AVPlayer(url: url)
+        if let previousURL, previousURL != url {
+            try? FileManager.default.removeItem(at: previousURL)
+        }
     }
 
     private func showOriginalPreview() {
         guard let media else { return }
         player.pause()
+        isShowingProcessedPreview = false
         player = AVPlayer(url: media.url)
-        seek(to: editState.trim.start)
-    }
-
-    private func constrainPlayerToTrim() {
-        guard editState.stabilization == .none else { return }
-        let time = player.currentTime().seconds
-        if time < editState.trim.start || time > editState.trim.end {
-            seek(to: editState.trim.start)
+        seek(to: editState.pendingTrim.start)
+        if let currentPreviewURL {
+            try? FileManager.default.removeItem(at: currentPreviewURL)
+            self.currentPreviewURL = nil
         }
     }
 
-    private func validate(outputInfo: MediaInfo, against source: MediaInfo, trim: TrimRange) throws {
+    private func constrainPlayerToPendingTrim() {
+        let time = timelineTime
+        if time < editState.pendingTrim.start || time > editState.pendingTrim.end {
+            seek(to: editState.pendingTrim.start)
+        }
+    }
+
+    private func validate(outputInfo: MediaInfo, against source: MediaInfo, duration: TimeInterval) throws {
         guard outputInfo.videoCodec.lowercased().contains("hvc") || outputInfo.videoCodec.lowercased().contains("hev") else {
             throw FrogmouthError.outputValidationFailed("The output is not HEVC.")
         }
@@ -378,8 +455,8 @@ final class EditorViewModel: ObservableObject {
             throw FrogmouthError.outputValidationFailed("The output dimensions changed unexpectedly.")
         }
         let frameTolerance = 1 / max(1, source.frameRate)
-        guard abs(outputInfo.duration - trim.duration) <= max(frameTolerance, 0.1) else {
-            throw FrogmouthError.outputValidationFailed("The output duration does not match the trim range.")
+        guard abs(outputInfo.duration - duration) <= max(frameTolerance, 0.1) else {
+            throw FrogmouthError.outputValidationFailed("The output duration does not match the committed edit pipeline.")
         }
     }
 
@@ -387,5 +464,7 @@ final class EditorViewModel: ObservableObject {
         player.pause()
         workspace?.removeAll()
         workspace = nil
+        currentPreviewURL = nil
+        isShowingProcessedPreview = false
     }
 }
