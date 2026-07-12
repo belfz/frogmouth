@@ -1,0 +1,10 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+build/
+*.xcuserstate
+*.xcuserdata/
+*.mp4
+*.MP4
+!Tests/Fixtures/*.mp4
