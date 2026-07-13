@@ -242,6 +242,7 @@ private struct LoadedEditorView: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Movie]
         panel.canCreateDirectories = true
+        panel.directoryURL = media.url.deletingLastPathComponent()
         panel.nameFieldStringValue = media.url.deletingPathExtension().lastPathComponent + "—frogmouth.mp4"
         panel.message = "Export a high-quality HEVC video"
         guard panel.runModal() == .OK, let destination = panel.url else { return }

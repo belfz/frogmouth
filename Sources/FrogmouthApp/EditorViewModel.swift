@@ -308,6 +308,7 @@ final class EditorViewModel: ObservableObject {
                 lastExportURL = destination
                 processingPhase = .idle
                 diagnostics.append(level: "INFO", sessionID: sessionID, phase: "export", message: "completed output=\(destination.path)")
+                NSWorkspace.shared.activateFileViewerSelecting([destination])
             } catch is CancellationError {
                 processingPhase = .idle
             } catch let error as FrogmouthError where error == .cancelled {

@@ -135,6 +135,31 @@ import Testing
     let filter = arguments[filterIndex + 1]
     #expect(filter.contains("interpol=bilinear"))
     #expect(filter.contains("scale=1024:-2"))
+    #expect(arguments.contains("0:a?"))
+    #expect(arguments.contains("copy"))
+    #expect(!arguments.contains("-an"))
+}
+
+@Test func previewKeepsAudioAlignedAfterPostStabilizationTrim() {
+    let pass = StabilizationPass(
+        mode: .steady,
+        transformsURL: URL(fileURLWithPath: "/tmp/transforms.trf")
+    )
+    let input = URL(fileURLWithPath: "/tmp/input.MP4")
+    let arguments = FFmpegCommandFactory.preview(
+        input: input,
+        sourceDuration: 10,
+        operations: [
+            .trim(TrimRange(start: 2, end: 8)),
+            .stabilization(pass),
+            .trim(TrimRange(start: 1, end: 4)),
+        ],
+        output: URL(fileURLWithPath: "/tmp/preview.mp4")
+    )
+
+    #expect(arguments.filter { $0 == input.path }.count == 2)
+    #expect(arguments.contains("1:a?"))
+    #expect(arguments.contains("3.000000"))
 }
 
 @Test func operationPipelinePreservesOrderingAndScopesLaterTrims() throws {
@@ -257,6 +282,7 @@ import Testing
 
     let previewInfo = try await MediaInspector().inspect(url: workspace.previewURL)
     #expect(previewInfo.videoCodec == "hvc1")
+    #expect(previewInfo.audioCodec == "aac")
     #expect(previewInfo.width == 1024)
     #expect(previewInfo.height == 540)
 }

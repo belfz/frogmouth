@@ -100,7 +100,7 @@ Exporting ── success/failure/cancel ──> Editing stabilized preview
 - Offer two commit actions: **Apply Steady** for stronger smoothing and **Apply Natural Motion** for lighter smoothing that preserves tracking pans. Applying either action adds a pass on top of existing edits; repeated and mixed passes are allowed.
 - Disable stabilization and export while a trim remains unconfirmed.
 - Keep the ordered edit stack implicit in v1. Show only the current pipeline result; a stabilized preview is rendered through every committed operation, not simulated.
-- Display one export choice: **High-quality HEVC — original resolution and frame rate — smaller file**. It includes brief explanatory text that frogmouth chooses the encoding parameters automatically.
+- Display one export choice: **High-quality HEVC — original resolution and frame rate — smaller file**. It includes brief explanatory text that frogmouth chooses the encoding parameters automatically. Open the save panel in the source clip's directory by default and reveal the completed output in Finder automatically; retain a manual **Reveal Export** action for reopening it later.
 - **Export…** always opens a normal macOS save dialog; never overwrite or generate a sibling file automatically.
 
 ### Analysis, preview, export, and cancellation
@@ -167,7 +167,7 @@ After analysis, render an HEVC proxy through the complete ordered operation list
 
 Treat stabilization latency as an active core-design issue. Measurements, rejected and deferred alternatives, decision history, and performance acceptance criteria live in [STABILIZATION_PERFORMANCE.md](STABILIZATION_PERFORMANCE.md).
 
-Use `AVPlayer` to play the proxy. Keep the original asset/player available while no stabilization is selected. The preview proxy intentionally omits audio if that materially improves responsiveness; the final export always retains audio unchanged. If audio is retained in the proxy, it must be copied rather than re-encoded.
+Use `AVPlayer` to play the proxy. Keep the original asset/player available while no stabilization is selected. Every preview must retain the source audio; a silent stabilized preview is confusing because the original preview has sound. Copy compatible AAC rather than re-encode it. If a trim occurs after stabilization, map audio from a separately sought input so the proxy remains synchronized with the filtered video, just as in the final export pipeline.
 
 ### Final export
 

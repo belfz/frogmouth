@@ -110,21 +110,28 @@ public enum FFmpegCommandFactory {
             interpolation: .bilinear
         )
         let filters = plan.filters + ["scale=1024:-2"]
-
-        return baseProgressArguments
+        let needsSeparateAudioInput = abs(plan.absoluteSourceStart - plan.inputStart) > 0.000_001
+        var arguments = baseProgressArguments
             + inputArguments(input: input, start: plan.inputStart)
-            + [
-                "-y",
-                "-map", "0:v:0",
-                "-an",
-                "-vf", filters.joined(separator: ","),
-                "-t", time(plan.duration),
-                "-c:v", "hevc_videotoolbox",
-                "-b:v", "12M",
-                "-tag:v", "hvc1",
-                "-movflags", "+faststart",
-                output.path,
-            ]
+
+        if needsSeparateAudioInput {
+            arguments += inputArguments(input: input, start: plan.absoluteSourceStart)
+        }
+
+        arguments += [
+            "-y",
+            "-map", "0:v:0",
+            "-map", needsSeparateAudioInput ? "1:a?" : "0:a?",
+            "-vf", filters.joined(separator: ","),
+            "-t", time(plan.duration),
+            "-c:v", "hevc_videotoolbox",
+            "-b:v", "12M",
+            "-tag:v", "hvc1",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            output.path,
+        ]
+        return arguments
     }
 
     public static func export(
