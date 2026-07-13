@@ -1,7 +1,7 @@
 # frogmouth
 
 <p align="center">
-  <img src="Sources/FrogmouthApp/Resources/FrogmouthMark.png" alt="frogmouth logo" width="240">
+  <img src="Assets/AppIcon.png" alt="frogmouth logo" width="240">
 </p>
 
 frogmouth is a macOS app for quickly stabilizing and trimming videos, then exporting a smaller, high-quality HEVC file.
