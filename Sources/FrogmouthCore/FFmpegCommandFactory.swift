@@ -20,6 +20,18 @@ public struct VideoPipelinePlan: Equatable, Sendable {
 }
 public enum FFmpegCommandFactory {
     public static func pipeline(sourceDuration: TimeInterval, operations: [EditOperation]) -> VideoPipelinePlan {
+        pipeline(
+            sourceDuration: sourceDuration,
+            operations: operations,
+            interpolation: .bicubic
+        )
+    }
+
+    private static func pipeline(
+        sourceDuration: TimeInterval,
+        operations: [EditOperation],
+        interpolation: StabilizationInterpolation
+    ) -> VideoPipelinePlan {
         var inputStart: TimeInterval = 0
         var absoluteSourceStart: TimeInterval = 0
         var duration = sourceDuration
@@ -44,7 +56,11 @@ public enum FFmpegCommandFactory {
             case let .stabilization(pass):
                 encounteredStabilization = true
                 guard let profile = StabilizationProfile.profile(for: pass.mode) else { continue }
-                filters.append(transformFilter(transforms: pass.transformsURL, profile: profile))
+                filters.append(transformFilter(
+                    transforms: pass.transformsURL,
+                    profile: profile,
+                    interpolation: interpolation
+                ))
             }
         }
 
@@ -88,7 +104,11 @@ public enum FFmpegCommandFactory {
         operations: [EditOperation],
         output: URL
     ) -> [String] {
-        let plan = pipeline(sourceDuration: sourceDuration, operations: operations)
+        let plan = pipeline(
+            sourceDuration: sourceDuration,
+            operations: operations,
+            interpolation: .bilinear
+        )
         let filters = plan.filters + ["scale=1024:-2"]
 
         return baseProgressArguments
@@ -162,8 +182,12 @@ public enum FFmpegCommandFactory {
         return arguments
     }
 
-    private static func transformFilter(transforms: URL, profile: StabilizationProfile) -> String {
-        "vidstabtransform=input=\(escapedFilterPath(transforms)):smoothing=\(profile.smoothing):optzoom=2:interpol=bicubic"
+    private static func transformFilter(
+        transforms: URL,
+        profile: StabilizationProfile,
+        interpolation: StabilizationInterpolation
+    ) -> String {
+        "vidstabtransform=input=\(escapedFilterPath(transforms)):smoothing=\(profile.smoothing):optzoom=2:interpol=\(interpolation.rawValue)"
     }
 
     private static func escapedFilterPath(_ url: URL) -> String {
@@ -181,4 +205,9 @@ public enum FFmpegCommandFactory {
     private static func time(_ value: TimeInterval) -> String {
         String(format: "%.6f", value)
     }
+}
+
+private enum StabilizationInterpolation: String {
+    case bilinear
+    case bicubic
 }

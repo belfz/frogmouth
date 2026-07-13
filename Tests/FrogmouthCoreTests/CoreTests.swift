@@ -115,6 +115,26 @@ import Testing
     #expect(arguments.contains("-map_metadata"))
     #expect(arguments.contains("copy"))
     #expect(!arguments.contains("-s"))
+    let filterIndex = try #require(arguments.firstIndex(of: "-vf"))
+    #expect(arguments[filterIndex + 1].contains("interpol=bicubic"))
+}
+
+@Test func previewUsesFasterBilinearInterpolation() throws {
+    let pass = StabilizationPass(
+        mode: .steady,
+        transformsURL: URL(fileURLWithPath: "/tmp/transforms.trf")
+    )
+    let arguments = FFmpegCommandFactory.preview(
+        input: URL(fileURLWithPath: "/tmp/input.MP4"),
+        sourceDuration: 10,
+        operations: [.stabilization(pass)],
+        output: URL(fileURLWithPath: "/tmp/preview.mp4")
+    )
+
+    let filterIndex = try #require(arguments.firstIndex(of: "-vf"))
+    let filter = arguments[filterIndex + 1]
+    #expect(filter.contains("interpol=bilinear"))
+    #expect(filter.contains("scale=1024:-2"))
 }
 
 @Test func operationPipelinePreservesOrderingAndScopesLaterTrims() throws {

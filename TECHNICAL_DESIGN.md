@@ -163,7 +163,9 @@ These are initial benchmark values, not a user-facing contract. On the supplied 
 
 ### Stabilized preview proxy
 
-After analysis, render an HEVC proxy through the complete ordered operation list. Scale only this temporary preview to an aspect-preserving width of 1024 pixels. The final export is never downscaled and never uses the lossy proxy as an input.
+After analysis, render an HEVC proxy through the complete ordered operation list. Use bilinear interpolation for stabilization in this temporary preview: it is substantially faster than bicubic at full source resolution and is sufficient for a 1024-pixel-wide proxy. Scale only this temporary preview to an aspect-preserving width of 1024 pixels. The final export is never downscaled, continues to use bicubic interpolation, and never uses the lossy proxy as an input.
+
+Treat stabilization latency as an active core-design issue. Measurements, rejected and deferred alternatives, decision history, and performance acceptance criteria live in [STABILIZATION_PERFORMANCE.md](STABILIZATION_PERFORMANCE.md).
 
 Use `AVPlayer` to play the proxy. Keep the original asset/player available while no stabilization is selected. The preview proxy intentionally omits audio if that materially improves responsiveness; the final export always retains audio unchanged. If audio is retained in the proxy, it must be copied rather than re-encoded.
 
