@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/build/frogmouth.app"
 CONTENTS="$APP/Contents"
 ICON="$ROOT/Assets/AppIcon.icns"
+RESOURCE_BUNDLE="$ROOT/.build/release/frogmouth_FrogmouthApp.bundle"
 
 cd "$ROOT"
 swift build -c release --disable-sandbox
@@ -12,6 +13,12 @@ swift build -c release --disable-sandbox
 rm -rf "$APP"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 cp "$ROOT/.build/release/frogmouth" "$CONTENTS/MacOS/frogmouth"
+
+if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
+    echo "Missing app resource bundle: $RESOURCE_BUNDLE" >&2
+    exit 1
+fi
+cp -R "$RESOURCE_BUNDLE" "$APP/"
 
 if [[ ! -f "$ICON" ]]; then
     echo "Missing app icon: $ICON" >&2

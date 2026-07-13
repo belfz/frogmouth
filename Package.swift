@@ -13,7 +13,8 @@ let package = Package(
         .target(name: "FrogmouthCore"),
         .executableTarget(
             name: "FrogmouthApp",
-            dependencies: ["FrogmouthCore"]
+            dependencies: ["FrogmouthCore"],
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "FrogmouthCoreTests",
@@ -21,4 +22,3 @@ let package = Package(
         ),
     ]
 )
-

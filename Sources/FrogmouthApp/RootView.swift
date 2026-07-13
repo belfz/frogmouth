@@ -107,7 +107,7 @@ private struct EditorView: View {
         panel.allowedContentTypes = [.mpeg4Movie, .movie]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.message = "Choose a Canon EOS R5-style MP4 video"
+        panel.message = "Choose a video clip"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         model.requestLoad(url)
     }
@@ -118,15 +118,33 @@ private struct EmptyEditorView: View {
     let loadDroppedURL: (URL) -> Void
     @State private var isDropTarget = false
 
+    private static let frogmouthMark: NSImage? = {
+        guard let url = Bundle.module.url(forResource: "FrogmouthMark", withExtension: "png") else {
+            return nil
+        }
+        return NSImage(contentsOf: url)
+    }()
+
     var body: some View {
         VStack(spacing: 18) {
-            Image(systemName: "film.stack")
-                .font(.system(size: 56))
-                .foregroundStyle(.secondary)
-            Text("Open a wildlife clip")
+            if let frogmouthMark = Self.frogmouthMark {
+                Image(nsImage: frogmouthMark)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .frame(width: 224, height: 192)
+                    .accessibilityLabel("frogmouth")
+            } else {
+                Image(systemName: "bird")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.secondary)
+                    .frame(width: 56, height: 56)
+                    .accessibilityLabel("frogmouth")
+            }
+            Text("Open a video clip")
                 .font(.title.bold())
-            Text("Canon EOS R5 MP4 is the tested input format.")
-                .foregroundStyle(.secondary)
             Button("Open Video…", action: openVideo)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)

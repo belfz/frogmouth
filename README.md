@@ -1,6 +1,8 @@
 # frogmouth
 
-frogmouth is a personal macOS app for quickly stabilizing and trimming Canon EOS R5 videos, then exporting a smaller, high-quality HEVC file.
+frogmouth is a personal macOS app for quickly stabilizing and trimming wildlife videos, then exporting a smaller, high-quality HEVC file.
+
+The project was initially designed and developed with Canon EOS R5 footage in mind—primarily 4K H.264 MP4 files with AAC audio. Those videos remain its principal development and testing material, while the application UI is intentionally camera-agnostic. Other formats that FFmpeg can decode are supported on a best-effort basis unless documented otherwise.
 
 The implementation design is in [TECHNICAL_DESIGN.md](TECHNICAL_DESIGN.md). Stabilization latency, benchmarks, alternatives, and optimization decisions are tracked in [STABILIZATION_PERFORMANCE.md](STABILIZATION_PERFORMANCE.md).
 
