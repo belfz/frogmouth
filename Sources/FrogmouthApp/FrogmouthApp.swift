@@ -47,6 +47,14 @@ struct FrogmouthApp: App {
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(!document.canRedo || document.isBusy)
             }
+            CommandMenu("Clip") {
+                Button("Split at Playhead", action: document.splitSelectedClip)
+                    .disabled(!document.canSplitSelectedClip)
+                Button("Duplicate", action: document.duplicateSelectedClip)
+                    .disabled(!document.canEditSelectedClip)
+                Button("Delete", role: .destructive, action: document.deleteSelectedClip)
+                    .disabled(!document.canEditSelectedClip)
+            }
             CommandMenu("Diagnostics") {
                 Button("Copy Diagnostics") { model.copyDiagnostics() }
                 Button("Reveal Logs in Finder") { model.revealLogs() }

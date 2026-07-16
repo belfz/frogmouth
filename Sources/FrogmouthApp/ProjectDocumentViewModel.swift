@@ -11,6 +11,14 @@ final class ProjectDocumentViewModel: ObservableObject {
         let filename: String
     }
 
+    typealias TrimEdge = TimelineTrimEdge
+
+    struct TrimPreview: Equatable {
+        let clipID: TimelineClip.ID
+        let originalRange: MediaTimeRange
+        var pendingRange: MediaTimeRange
+    }
+
     @Published private(set) var project: ProjectState?
     @Published private(set) var fileURL: URL?
     @Published private(set) var resolvedMediaURLs: [MediaAsset.ID: URL] = [:]
@@ -22,6 +30,7 @@ final class ProjectDocumentViewModel: ObservableObject {
     @Published private(set) var selectedAssetID: MediaAsset.ID?
     @Published private(set) var selectedClipID: TimelineClip.ID?
     @Published private(set) var playheadFrame: Int64 = 0
+    @Published private(set) var trimPreview: TrimPreview?
     @Published var errorMessage: String?
     @Published var isUnsavedConfirmationPresented = false
 
@@ -56,6 +65,26 @@ final class ProjectDocumentViewModel: ObservableObject {
     var hasProject: Bool { project != nil }
     var canSave: Bool { project != nil && !isBusy }
     var canImport: Bool { project != nil && !isBusy }
+    var canEditSelectedClip: Bool {
+        selectedClipID != nil && !isBusy && trimPreview == nil
+    }
+    var canSplitSelectedClip: Bool {
+        guard canEditSelectedClip,
+              let project,
+              let selectedClipID,
+              let index = try? TimelineIndex(project: project),
+              let entry = index.entry(for: selectedClipID) else { return false }
+        return playheadFrame > entry.startFrame
+            && playheadFrame < entry.startFrame + entry.durationFrames
+    }
+    var presentationProject: ProjectState? {
+        guard var project else { return nil }
+        if let trimPreview,
+           let index = project.clips.firstIndex(where: { $0.id == trimPreview.clipID }) {
+            project.clips[index].sourceRange = trimPreview.pendingRange
+        }
+        return project
+    }
     var displayName: String {
         guard let project else { return "frogmouth" }
         return hasUnsavedChanges ? "\(project.name) — Edited" : project.name
@@ -146,6 +175,10 @@ final class ProjectDocumentViewModel: ObservableObject {
     }
 
     func undo() {
+        if trimPreview != nil {
+            cancelTrimPreview()
+            return
+        }
         guard !isBusy, let session else { return }
         Task {
             do {
@@ -159,6 +192,10 @@ final class ProjectDocumentViewModel: ObservableObject {
     }
 
     func redo() {
+        if trimPreview != nil {
+            cancelTrimPreview()
+            return
+        }
         guard !isBusy, let session else { return }
         Task {
             do {
@@ -208,11 +245,13 @@ final class ProjectDocumentViewModel: ObservableObject {
     }
 
     func selectAsset(_ assetID: MediaAsset.ID?) {
+        cancelTrimPreview()
         selectedAssetID = assetID
         selectedClipID = nil
     }
 
     func selectClip(_ clipID: TimelineClip.ID?) {
+        if trimPreview?.clipID != clipID { cancelTrimPreview() }
         selectedClipID = clipID
         guard let clipID,
               let clip = project?.clips.first(where: { $0.id == clipID }) else { return }
@@ -227,8 +266,147 @@ final class ProjectDocumentViewModel: ObservableObject {
         playheadFrame = min(max(0, frame), index.totalFrames)
     }
 
+    func updateTrimPreview(
+        clipID: TimelineClip.ID,
+        edge: TrimEdge,
+        timelineFrameDelta: Int64
+    ) {
+        guard !isBusy,
+              let project,
+              let clip = project.clips.first(where: { $0.id == clipID }),
+              let asset = project.mediaLibrary.first(where: { $0.id == clip.assetID }),
+              let timelineRate = project.timelineFormat?.frameRate else { return }
+        if trimPreview?.clipID != clipID {
+            trimPreview = TrimPreview(
+                clipID: clipID,
+                originalRange: clip.sourceRange,
+                pendingRange: clip.sourceRange
+            )
+        }
+        guard let original = trimPreview?.originalRange,
+              let range = try? TimelineTrimMapper().sourceRange(
+                originalRange: original,
+                assetDuration: asset.inspected.duration,
+                edge: edge,
+                timelineFrameDelta: timelineFrameDelta,
+                timelineRate: timelineRate,
+                sourceRate: asset.inspected.frameRate
+              ) else { return }
+
+        var validator = ProjectEditor(project: project)
+        guard (try? validator.apply(.trimClip(clipID: clipID, sourceRange: range))) != nil else {
+            return
+        }
+        trimPreview?.pendingRange = range
+    }
+
+    func commitTrimPreview() {
+        guard let preview = trimPreview, let session else { return }
+        isBusy = true
+        Task {
+            defer {
+                trimPreview = nil
+                isBusy = false
+            }
+            do {
+                try await session.beginTrim(clipID: preview.clipID)
+                try await session.updateTrim(to: preview.pendingRange)
+                try await session.commitTrim()
+                await refreshPublishedState()
+                scheduleAutosaveStatusRefresh()
+            } catch {
+                errorMessage = error.localizedDescription
+                await refreshPublishedState()
+            }
+        }
+    }
+
+    func cancelTrimPreview() {
+        trimPreview = nil
+    }
+
+    func splitSelectedClip() {
+        guard canSplitSelectedClip,
+              let session,
+              let project,
+              let selectedClipID,
+              let index = try? TimelineIndex(project: project),
+              let entry = index.entry(for: selectedClipID) else { return }
+        let rightClipID = UUID()
+        let offset = playheadFrame - entry.startFrame
+        Task {
+            _ = await apply(
+                .splitClip(
+                    clipID: selectedClipID,
+                    atTimelineFrameOffset: offset,
+                    rightClipID: rightClipID
+                ),
+                to: session,
+                selectingClip: rightClipID
+            )
+        }
+    }
+
+    func duplicateSelectedClip() {
+        guard canEditSelectedClip, let session, let selectedClipID else { return }
+        let duplicateID = UUID()
+        Task {
+            guard await apply(
+                .duplicateClip(clipID: selectedClipID, newClipID: duplicateID),
+                to: session,
+                selectingClip: duplicateID
+            ) else { return }
+            movePlayheadToSelectedClipStart()
+        }
+    }
+
+    func deleteSelectedClip() {
+        guard canEditSelectedClip,
+              let session,
+              let project,
+              let selectedClipID,
+              let deletedIndex = project.clips.firstIndex(where: { $0.id == selectedClipID }) else {
+            return
+        }
+        Task {
+            guard await apply(.deleteClip(clipID: selectedClipID), to: session) else {
+                return
+            }
+            guard let updated = self.project else { return }
+            if updated.clips.isEmpty {
+                self.selectedClipID = nil
+                self.playheadFrame = 0
+            } else {
+                let nextIndex = min(deletedIndex, updated.clips.count - 1)
+                self.selectClip(updated.clips[nextIndex].id)
+                self.movePlayheadToSelectedClipStart()
+            }
+        }
+    }
+
+    func moveClip(_ clipID: TimelineClip.ID, toBoundaryIndex boundaryIndex: Int) {
+        guard !isBusy,
+              trimPreview == nil,
+              let session,
+              let project,
+              let sourceIndex = project.clips.firstIndex(where: { $0.id == clipID }),
+              !project.clips.isEmpty else { return }
+        let destination = sourceIndex < boundaryIndex ? boundaryIndex - 1 : boundaryIndex
+        let clamped = min(max(0, destination), project.clips.count - 1)
+        guard clamped != sourceIndex else { return }
+        Task {
+            guard await apply(
+                .moveClip(clipID: clipID, toIndex: clamped),
+                to: session,
+                selectingClip: clipID
+            ) else { return }
+            movePlayheadToSelectedClipStart()
+        }
+    }
+
     func insertAssetOnTimeline(_ assetID: MediaAsset.ID, at index: Int? = nil) {
-        guard let session,
+        guard trimPreview == nil,
+              let session,
               let project,
               let asset = project.mediaLibrary.first(where: { $0.id == assetID }) else { return }
         guard let sourceRange = try? MediaTimeRange(
@@ -249,7 +427,7 @@ final class ProjectDocumentViewModel: ObservableObject {
     }
 
     func removeAssetFromLibrary(_ assetID: MediaAsset.ID) {
-        guard let session else { return }
+        guard trimPreview == nil, let session else { return }
         Task {
             await apply(.removeUnusedMedia(assetID: assetID), to: session)
         }
@@ -390,21 +568,32 @@ final class ProjectDocumentViewModel: ObservableObject {
         return commands
     }
 
+    @discardableResult
     private func apply(
         _ command: ProjectCommand,
         to session: ProjectDocumentSession,
         selectingClip clipID: TimelineClip.ID? = nil
-    ) async {
-        guard !isBusy else { return }
+    ) async -> Bool {
+        guard !isBusy else { return false }
         do {
             try await session.apply(command)
             if let clipID { selectedClipID = clipID }
             await refreshPublishedState()
             scheduleAutosaveStatusRefresh()
+            return true
         } catch {
             errorMessage = error.localizedDescription
             await refreshPublishedState()
+            return false
         }
+    }
+
+    private func movePlayheadToSelectedClipStart() {
+        guard let project,
+              let selectedClipID,
+              let index = try? TimelineIndex(project: project),
+              let entry = index.entry(for: selectedClipID) else { return }
+        playheadFrame = entry.startFrame
     }
 
     @discardableResult
@@ -449,6 +638,7 @@ final class ProjectDocumentViewModel: ObservableObject {
 
     private func install(_ session: ProjectDocumentSession?) {
         autosaveStatusTask?.cancel()
+        trimPreview = nil
         self.session = session
     }
 

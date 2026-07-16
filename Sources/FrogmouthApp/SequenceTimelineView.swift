@@ -219,6 +219,8 @@ private struct TimelineTrackContent: View {
                             clip: clip,
                             asset: project.mediaLibrary.first { $0.id == clip.assetID },
                             width: width,
+                            timelineRate: project.timelineFormat?.frameRate,
+                            pixelsPerSecond: pixelsPerSecond,
                             requestsThumbnail: intersectsPrefetch(startX: startX, width: width),
                             isSelected: document.selectedClipID == clip.id
                         )
@@ -299,7 +301,8 @@ private struct TimelineTrackContent: View {
     }
 
     private func scrub(atX location: Double) {
-        guard let frameRate = project.timelineFormat?.frameRate,
+        guard document.trimPreview == nil,
+              let frameRate = project.timelineFormat?.frameRate,
               let timelineIndex,
               let proposed = try? math.frame(
                 atX: location,
@@ -388,6 +391,8 @@ private struct TimelinePresentationClip: View {
     let clip: TimelineClip
     let asset: MediaAsset?
     let width: Double
+    let timelineRate: FrameRate?
+    let pixelsPerSecond: Double
     let requestsThumbnail: Bool
     let isSelected: Bool
 
@@ -426,6 +431,17 @@ private struct TimelinePresentationClip: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: 5))
         .onTapGesture { document.selectClip(clip.id) }
+        .draggable("clip:\(clip.id.uuidString)")
+        .overlay(alignment: .leading) {
+            if isSelected {
+                trimHandle(edge: .leading)
+            }
+        }
+        .overlay(alignment: .trailing) {
+            if isSelected {
+                trimHandle(edge: .trailing)
+            }
+        }
         .help(filename)
     }
 
@@ -472,6 +488,52 @@ private struct TimelinePresentationClip: View {
             pixelHeight: 160
         )
     }
+
+    private func trimHandle(edge: ProjectDocumentViewModel.TrimEdge) -> some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(width: 5)
+            Capsule()
+                .fill(Color.white.opacity(0.9))
+                .frame(width: 2, height: 24)
+        }
+        .frame(width: 14, height: 80)
+        .contentShape(Rectangle())
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    document.updateTrimPreview(
+                        clipID: clip.id,
+                        edge: edge,
+                        timelineFrameDelta: timelineFrameDelta(for: value.translation.width)
+                    )
+                }
+                .onEnded { value in
+                    document.updateTrimPreview(
+                        clipID: clip.id,
+                        edge: edge,
+                        timelineFrameDelta: timelineFrameDelta(for: value.translation.width)
+                    )
+                    document.commitTrimPreview()
+                }
+        )
+        .onHover { hovering in
+            if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+        }
+        .help(edge == .leading ? "Trim the clip start" : "Trim the clip end")
+        .accessibilityLabel(edge == .leading ? "Leading trim handle" : "Trailing trim handle")
+    }
+
+    private func timelineFrameDelta(for horizontalTranslation: Double) -> Int64 {
+        guard let timelineRate, pixelsPerSecond > 0 else { return 0 }
+        let frames = horizontalTranslation / pixelsPerSecond
+            * Double(timelineRate.numerator) / Double(timelineRate.denominator)
+        guard frames.isFinite,
+              frames >= Double(Int64.min),
+              frames <= Double(Int64.max) else { return 0 }
+        return Int64(frames.rounded(.toNearestOrAwayFromZero))
+    }
 }
 
 private struct TimelineDropBoundary: View {
@@ -491,11 +553,18 @@ private struct TimelineDropBoundary: View {
         .frame(width: 18, height: 84)
         .contentShape(Rectangle())
         .dropDestination(for: String.self) { values, _ in
-            guard let value = values.first, let assetID = UUID(uuidString: value) else {
-                return false
+            guard let value = values.first else { return false }
+            if value.hasPrefix("asset:"),
+               let assetID = UUID(uuidString: String(value.dropFirst("asset:".count))) {
+                document.insertAssetOnTimeline(assetID, at: insertionIndex)
+                return true
             }
-            document.insertAssetOnTimeline(assetID, at: insertionIndex)
-            return true
+            if value.hasPrefix("clip:"),
+               let clipID = UUID(uuidString: String(value.dropFirst("clip:".count))) {
+                document.moveClip(clipID, toBoundaryIndex: insertionIndex)
+                return true
+            }
+            return false
         } isTargeted: {
             isTargeted = $0
         }

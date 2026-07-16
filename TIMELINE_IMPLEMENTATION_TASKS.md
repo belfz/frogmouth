@@ -275,14 +275,14 @@ Acceptance:
 
 Dependencies: T06, T13.
 
-- [ ] Select one clip and expose its details in the inspector.
-- [ ] Add trim handles with live gapless ripple feedback.
-- [ ] Commit one undo step on pointer-up and restore on cancellation.
-- [ ] Split selected clip at the frame-aligned playhead.
-- [ ] Drag to reorder with a clear insertion indicator.
-- [ ] Duplicate and ripple-delete the selected clip.
-- [ ] Remove the old explicit **Confirm Trim** workflow from the new editor.
-- [ ] Wire toolbar/menu enablement to selection and processing state.
+- [x] Select one clip and expose its details in the inspector.
+- [x] Add trim handles with live gapless ripple feedback.
+- [x] Commit one undo step on pointer-up and restore on cancellation.
+- [x] Split selected clip at the frame-aligned playhead.
+- [x] Drag to reorder with a clear insertion indicator.
+- [x] Duplicate and ripple-delete the selected clip.
+- [x] Remove the old explicit **Confirm Trim** workflow from the new editor.
+- [x] Wire toolbar/menu enablement to selection and processing state.
 
 Acceptance:
 

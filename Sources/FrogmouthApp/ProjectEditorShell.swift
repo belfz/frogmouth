@@ -21,14 +21,20 @@ struct ProjectEditorShell: View {
                     .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
 
                 if showsInspector {
-                    ProjectInspectorView(document: document, project: project)
+                    ProjectInspectorView(
+                        document: document,
+                        project: document.presentationProject ?? project
+                    )
                         .frame(minWidth: 220, idealWidth: 270, maxWidth: 360)
                 }
             }
 
             Divider()
 
-            SequenceTimelineView(document: document, project: project)
+            SequenceTimelineView(
+                document: document,
+                project: document.presentationProject ?? project
+            )
                 .frame(minHeight: 150, idealHeight: 190, maxHeight: 240)
         }
         .toolbar {
@@ -46,6 +52,22 @@ struct ProjectEditorShell: View {
                 .disabled(!document.canImport)
             }
             ToolbarItemGroup {
+                Button(action: document.splitSelectedClip) {
+                    Label("Split Clip", systemImage: "scissors")
+                }
+                .disabled(!document.canSplitSelectedClip)
+                .help("Split the selected clip at the playhead")
+
+                Button(action: document.duplicateSelectedClip) {
+                    Label("Duplicate Clip", systemImage: "plus.square.on.square")
+                }
+                .disabled(!document.canEditSelectedClip)
+
+                Button(role: .destructive, action: document.deleteSelectedClip) {
+                    Label("Delete Clip", systemImage: "trash")
+                }
+                .disabled(!document.canEditSelectedClip)
+
                 Button {
                     showsInspector.toggle()
                 } label: {
@@ -59,6 +81,7 @@ struct ProjectEditorShell: View {
                 .disabled(!document.canSave)
             }
         }
+        .onExitCommand(perform: document.cancelTrimPreview)
     }
 }
 
@@ -188,7 +211,7 @@ private struct MediaLibraryRow: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 8))
         .onTapGesture { document.selectAsset(asset.id) }
-        .draggable(asset.id.uuidString)
+        .draggable("asset:\(asset.id.uuidString)")
     }
 
     private var filename: String {
