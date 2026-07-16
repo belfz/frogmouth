@@ -71,10 +71,10 @@ Acceptance:
 
 Dependencies: T00.
 
-- [ ] Extend inspection facts with primaries, transfer function, matrix, and range.
-- [ ] Define exact equality/compatibility rules, including missing or unknown tags.
-- [ ] Test matching SDR fixtures and deliberately conflicting fixtures.
-- [ ] Specify the actionable error text naming each mismatched property.
+- [x] Extend inspection facts with primaries, transfer function, matrix, and range.
+- [x] Define exact equality/compatibility rules, including missing or unknown tags.
+- [x] Test matching SDR fixtures and deliberately conflicting fixtures.
+- [x] Specify the actionable error text naming each mismatched property.
 
 Acceptance:
 

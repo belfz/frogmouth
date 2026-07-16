@@ -228,7 +228,11 @@ For compatible colour sources with different dimensions, aspect ratios, or frame
 
 The first timeline release intentionally rejects sources whose colour characteristics are incompatible with the first clip. Resolution and frame-rate normalization are mechanical; silent HDR/SDR, Log, transfer-function, matrix, range, or primaries conversion could visibly damage footage.
 
-`ColourSignature` must therefore include at least primaries, transfer function, matrix, and full/limited range. Import into the Media Library may succeed, but insertion into an established timeline must explain the exact incompatibility. Proper colour management and explicit conversion controls are deferred. This is a known assumption, not an accidental unsupported case.
+`VideoColourMetadata` includes primaries, transfer function, matrix, and full/limited range. Known Apple, FFmpeg, numeric, punctuation, and case aliases normalize to canonical semantic values before comparison. All four normalized values must then be exactly equal.
+
+Missing/unspecified matches only missing/unspecified. An unrecognized tag matches only the same punctuation/case-normalized unrecognized tag. A known value never matches missing or unrecognized metadata. Accepting two identically missing or unrecognized values is a pragmatic assumption: frogmouth cannot prove their underlying colour characteristics without proper pixel conversion, but it rejects every observable conflict. Primaries, transfer, and matrix are never guessed from resolution or camera model. For compressed H.264/HEVC/MPEG-4 YCbCr, Core Media's absent `FullRangeVideo` flag has its specified limited-range meaning.
+
+Import into the Media Library may succeed, but insertion into an established timeline must list every mismatch as `property (timeline: value; clip: value)`, state that frogmouth does not convert colour spaces yet, and tell the user to choose a clip with matching colour metadata. Proper colour management and explicit conversion controls are deferred. This is a known assumption, not an accidental unsupported case. The executable policy and fixture evidence are recorded in [the T03 validation record](Tests/Spikes/T03_COLOUR_COMPATIBILITY.md).
 
 The project was initialized around Canon EOS R5 footage, but compatibility messages and the UI remain camera-agnostic.
 

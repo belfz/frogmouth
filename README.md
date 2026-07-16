@@ -10,6 +10,8 @@ The project was initially designed and developed with Canon EOS R5 footage in mi
 
 The current implementation design is in [TECHNICAL_DESIGN.md](TECHNICAL_DESIGN.md). The proposed single-track editor is specified in [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md), with an ordered execution backlog in [TIMELINE_IMPLEMENTATION_TASKS.md](TIMELINE_IMPLEMENTATION_TASKS.md). Stabilization latency, benchmarks, alternatives, and optimization decisions are tracked in [STABILIZATION_PERFORMANCE.md](STABILIZATION_PERFORMANCE.md).
 
+The first timeline release will preserve the colour characteristics established by its first clip. Clips with conflicting primaries, transfer function (including HDR or Log), matrix, or full/limited range will be rejected with the differing properties listed; frogmouth will not silently convert them. Proper colour conversion is deferred to a later iteration.
+
 ## Development
 
 Requirements:

@@ -14,6 +14,7 @@ public struct MediaInfo: Equatable, Sendable {
     public let audioChannelCount: Int?
     public let fileSize: Int64
     public let metadata: [String: String]
+    public let colour: VideoColourMetadata
 
     public init(
         url: URL,
@@ -27,7 +28,8 @@ public struct MediaInfo: Equatable, Sendable {
         audioSampleRate: Double?,
         audioChannelCount: Int?,
         fileSize: Int64,
-        metadata: [String: String]
+        metadata: [String: String],
+        colour: VideoColourMetadata = .unspecified
     ) {
         self.url = url
         self.duration = duration
@@ -41,6 +43,7 @@ public struct MediaInfo: Equatable, Sendable {
         self.audioChannelCount = audioChannelCount
         self.fileSize = fileSize
         self.metadata = metadata
+        self.colour = colour
     }
 }
 
@@ -195,6 +198,7 @@ public enum FrogmouthError: LocalizedError, Equatable, Sendable {
     case ffmpegNotFound
     case unsupportedFFmpeg(String)
     case unsupportedMedia(String)
+    case incompatibleColour(String)
     case invalidTrimRange
     case processingFailed(String)
     case cancelled
@@ -209,6 +213,8 @@ public enum FrogmouthError: LocalizedError, Equatable, Sendable {
             "This FFmpeg installation is unsupported: \(message)"
         case let .unsupportedMedia(message):
             "The video cannot be opened: \(message)"
+        case let .incompatibleColour(message):
+            message
         case .invalidTrimRange:
             "The selected trim range is invalid."
         case let .processingFailed(message):

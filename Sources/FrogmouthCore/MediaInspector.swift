@@ -29,6 +29,9 @@ public struct MediaInspector: MediaInspecting {
             let videoBitrate = Double(try await videoTrack.load(.estimatedDataRate))
             let videoFormats = try await videoTrack.load(.formatDescriptions)
             let videoCodec = Self.fourCC(videoFormats.first.map(CMFormatDescriptionGetMediaSubType) ?? 0)
+            let colour = videoFormats.first.map {
+                Self.colourMetadata(from: $0, videoCodec: videoCodec)
+            } ?? .unspecified
 
             let audioTrack = try await asset.loadTracks(withMediaType: .audio).first
             var audioCodec: String?
@@ -66,7 +69,8 @@ public struct MediaInspector: MediaInspecting {
                 audioSampleRate: sampleRate,
                 audioChannelCount: channelCount,
                 fileSize: Int64(values.fileSize ?? 0),
-                metadata: metadata
+                metadata: metadata,
+                colour: colour
             )
         } catch let error as FrogmouthError {
             throw error
@@ -83,5 +87,38 @@ public struct MediaInspector: MediaInspecting {
             UInt8(value & 0xff),
         ]
         return String(bytes: bytes, encoding: .ascii)?.trimmingCharacters(in: .whitespaces) ?? "unknown"
+    }
+
+    private static func colourMetadata(
+        from description: CMFormatDescription,
+        videoCodec: String
+    ) -> VideoColourMetadata {
+        guard let formatExtensions = CMFormatDescriptionGetExtensions(description) else {
+            return .unspecified
+        }
+        let extensions = formatExtensions as NSDictionary
+        func stringValue(for key: CFString) -> String? {
+            extensions.object(forKey: key) as? String
+        }
+
+        let range: String?
+        if let fullRange = extensions.object(
+            forKey: kCMFormatDescriptionExtension_FullRangeVideo
+        ) as? NSNumber {
+            range = fullRange.boolValue ? "full" : "limited"
+        } else if ["avc1", "avc3", "hvc1", "hev1", "mp4v"].contains(videoCodec) {
+            // Core Media defines a missing FullRangeVideo extension as limited
+            // for compressed YCbCr formats.
+            range = "limited"
+        } else {
+            range = nil
+        }
+
+        return VideoColourMetadata(
+            primaries: stringValue(for: kCMFormatDescriptionExtension_ColorPrimaries),
+            transferFunction: stringValue(for: kCMFormatDescriptionExtension_TransferFunction),
+            matrix: stringValue(for: kCMFormatDescriptionExtension_YCbCrMatrix),
+            range: range
+        )
     }
 }
