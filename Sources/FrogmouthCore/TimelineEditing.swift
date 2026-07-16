@@ -358,6 +358,15 @@ public struct ProjectHistory: Sendable {
         undoStack.removeAll()
         redoStack.removeAll()
     }
+
+    fileprivate mutating func reassignProjectID(_ id: ProjectState.ID) {
+        for index in undoStack.indices {
+            undoStack[index].id = id
+        }
+        for index in redoStack.indices {
+            redoStack[index].id = id
+        }
+    }
 }
 
 public struct TrimTransaction: Equatable, Sendable {
@@ -453,6 +462,11 @@ public struct ProjectEditor: Sendable {
             throw TimelineEditError.noActiveTrimTransaction
         }
         trimTransaction = nil
+    }
+
+    mutating func reassignProjectID(_ id: ProjectState.ID) {
+        project.id = id
+        history.reassignProjectID(id)
     }
 
     private mutating func applyCommitted(_ command: ProjectCommand) throws {

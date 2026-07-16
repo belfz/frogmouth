@@ -231,6 +231,12 @@ If a file exists but its fingerprint changed, re-inspect it. Accept it only if e
 - Undo/redo history resets when a project is reopened.
 - Only one project window is supported initially.
 
+`ProjectDocumentSession` is the document-lifecycle boundary used by the later UI phase. It owns the value-state editor, the last successfully saved snapshot, the current document URL, resolved runtime media URLs, and a persistent save error. New documents have no URL; plain Save therefore requests a first-save location, while Save As assigns a new project UUID and consistently rewrites the session-local history to that identity. Opening constructs a fresh editor from the fully validated project, so undo and redo never cross sessions.
+
+All manual and automatic writes pass through one actor-isolated `ProjectDocumentStore`. `AtomicProjectFileWriter` creates a hidden sibling temporary file, writes and `fsync`s its complete bytes, closes it, atomically renames it over the destination, and then best-effort `fsync`s the parent directory. A failed write does not advance the saved snapshot or discard the in-memory project. The UI can use `needsCloseConfirmation` whenever the current value differs from the last successful snapshot and display `lastSaveError` until a later save succeeds.
+
+`ProjectAutosaveCoordinator` snapshots only committed project values and debounces them for 750 ms. A newer snapshot cancels an older pending debounce; the document store serializes any write already underway, ensuring the newest scheduled value is written last. Starting a manual Save or Save As cancels pending autosave first. Trim-pointer updates live solely in `TrimTransaction`, so no autosave is scheduled until pointer-up commits the one trim command; undo and redo schedule autosave like any other committed edit.
+
 ## 5. Media compatibility and conformance
 
 The first timeline clip establishes the output canvas, frame rate, colour signature, and baseline audio format.
@@ -346,6 +352,8 @@ Continue using value semantics. At the target scale, storing prior `ProjectState
 `ProjectHistory` contains session-local undo and redo stacks of copy-on-write `ProjectState` values. Each command records one prior state and invalidates redo after a divergent edit. A trim drag has a `TrimTransaction` containing only its original and current candidate source ranges; the persisted/in-memory project value is unchanged until pointer-up applies one validated trim command. Cancel discards the transaction. Project selection and playhead movement are outside both project state and history.
 
 After a committed command or undo/redo, schedule autosave. A failed autosave leaves the last valid file intact and shows a persistent error; it must not erase in-memory edits.
+
+Persistence tests exercise initial save, replacement, Save As identity, close state, injected write failure, rapid debounce, undo/redo autosave, transient versus committed trim, and reopen behavior. The final `.frogmouth` path always decodes as either the previous or new complete state—never a partially written JSON document.
 
 ## 9. FFmpeg timeline export
 

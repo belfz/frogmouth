@@ -166,13 +166,13 @@ Dependencies: T05, T06, T07.
 
 Suggested components: `ProjectDocumentStore`, `AutosaveCoordinator`.
 
-- [ ] Create untitled/new, open, first save, save, and save-as operations.
-- [ ] Use a sibling temporary file followed by atomic replacement.
-- [ ] Debounce autosave after committed edits and undo/redo.
-- [ ] Never write transient trim-drag state.
-- [ ] Preserve the last valid file and in-memory state after a failed save.
-- [ ] Prompt on closing an unsaved modified project.
-- [ ] Reset undo/redo on reopen.
+- [x] Create untitled/new, open, first save, save, and save-as operations.
+- [x] Use a sibling temporary file followed by atomic replacement.
+- [x] Debounce autosave after committed edits and undo/redo.
+- [x] Never write transient trim-drag state.
+- [x] Preserve the last valid file and in-memory state after a failed save.
+- [x] Prompt on closing an unsaved modified project.
+- [x] Reset undo/redo on reopen.
 
 Acceptance:
 
