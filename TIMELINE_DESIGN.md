@@ -79,6 +79,8 @@ Timeline thumbnails are always sampled from original source media. They do not r
 
 The current `TimeInterval`/`Double` edit model is not precise enough for repeated splits and concatenation. Persist rational media times and convert to `CMTime` at the AVFoundation boundary.
 
+`MediaTime` and `FrameRate` normalize numerator/denominator pairs by their greatest common divisor and reject non-positive scales. Arithmetic uses checked integer operations and reports overflow instead of falling back to floating point. `CMTime` conversion copies integer value/timescale directly and rejects non-numeric values and non-zero epochs.
+
 ```swift
 struct MediaTime: Codable, Hashable, Sendable {
     var value: Int64
@@ -127,6 +129,8 @@ struct ProjectState: Codable, Equatable, Sendable {
 The first inserted clip establishes `TimelineFormat`. Removing every clip does not silently change it; a future explicit project-settings workflow may do so. Frame rate must be a rational such as `60000/1001`, never a rounded `Double`.
 
 All structural edits snap to timeline frame boundaries. When a source frame rate differs, one shared conversion policy maps timeline time to the closest valid source/media time using documented `CMTime` rounding. A clip must contain at least one timeline frame. Split is disabled on either edge.
+
+The implemented rounding policies are explicitly named `towardNegativeInfinity`, `towardPositiveInfinity`, and `nearestTiesAwayFromZero`; timeline duration conformance and ordinary playhead/source mapping use the latter. `HH:MM:SS:FF` uses nominal-rate, non-drop-frame counting, including for 24000/1001, 30000/1001, and 60000/1001. A later drop-frame display, if desired, must be a separate explicit format using a semicolon rather than silently changing persisted timing.
 
 The exact source range remains expressed in its native rational time. Its timeline duration is the nearest whole number of timeline frames, so conformance can adjust duration by at most half a timeline frame. AVFoundation scales the inserted composition segment—including linked audio—to that snapped duration. FFmpeg applies the equivalent frame-rate/timestamp normalization and a matching audio tempo adjustment. This avoids fractional final frames and keeps every cut addressable by `HH:MM:SS:FF`.
 

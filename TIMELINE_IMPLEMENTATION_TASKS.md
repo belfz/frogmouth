@@ -90,11 +90,11 @@ Dependencies: T02.
 
 Suggested types: `MediaTime`, `MediaTimeRange`, `FrameRate`, `TimelineTimeMapper`.
 
-- [ ] Implement normalized rational time values with checked arithmetic.
-- [ ] Bridge to/from `CMTime` without passing through `Double`.
-- [ ] Implement timeline-frame snapping and source-time mapping with explicit rounding.
-- [ ] Implement one-frame minimum validation.
-- [ ] Add formatted `HH:MM:SS:FF` timecode.
+- [x] Implement normalized rational time values with checked arithmetic.
+- [x] Bridge to/from `CMTime` without passing through `Double`.
+- [x] Implement timeline-frame snapping and source-time mapping with explicit rounding.
+- [x] Implement one-frame minimum validation.
+- [x] Add formatted `HH:MM:SS:FF` timecode.
 
 Acceptance:
 
