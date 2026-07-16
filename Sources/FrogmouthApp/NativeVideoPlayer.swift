@@ -7,10 +7,11 @@ import SwiftUI
 /// compatibility bug while retaining native playback controls.
 struct NativeVideoPlayer: NSViewRepresentable {
     let player: AVPlayer
+    var controlsStyle: AVPlayerViewControlsStyle = .floating
 
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()
-        view.controlsStyle = .floating
+        view.controlsStyle = controlsStyle
         view.videoGravity = .resizeAspect
         view.showsFullScreenToggleButton = true
         view.player = player
@@ -21,6 +22,8 @@ struct NativeVideoPlayer: NSViewRepresentable {
         if view.player !== player {
             view.player = player
         }
+        if view.controlsStyle != controlsStyle {
+            view.controlsStyle = controlsStyle
+        }
     }
 }
-

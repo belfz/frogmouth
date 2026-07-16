@@ -237,6 +237,10 @@ All manual and automatic writes pass through one actor-isolated `ProjectDocument
 
 `ProjectAutosaveCoordinator` snapshots only committed project values and debounces them for 750 ms. A newer snapshot cancels an older pending debounce; the document store serializes any write already underway, ensuring the newest scheduled value is written last. Starting a manual Save or Save As cancels pending autosave first. Trim-pointer updates live solely in `TrimTransaction`, so no autosave is scheduled until pointer-up commits the one trim command; undo and redo schedule autosave like any other committed edit.
 
+The Phase 2 application shell owns exactly one `ProjectDocumentSession`. Startup offers **New Project**, **Open Project…**, and creation from one or more videos, with no Recent Projects state. Dropping a `.frogmouth` file requests an open; dropping videos creates an untitled project when none is open and appends full-source clips in drop order. Standard New/Open/Save/Save As/Close/Undo/Redo commands route to the document session, and the FFmpeg startup gate remains in front of the shell.
+
+Replacing or closing a modified project enters one shared Save/Discard/Cancel decision. Save performs first-save location selection when necessary; Discard cancels any pending debounced autosave, restores the last successful snapshot, and clears history before continuing. The window close button uses the same decision rather than bypassing it. Imported runtime URLs are reconciled as media-library edits move through apply, undo, and redo, while only portable path references remain in project JSON.
+
 ## 5. Media compatibility and conformance
 
 The first timeline clip establishes the output canvas, frame rate, colour signature, and baseline audio format.
@@ -336,9 +340,21 @@ Use a hybrid architecture:
 - AVFoundation for interactive playback composition.
 - FFmpeg for stabilization processing and final export.
 
+The Phase 2 shell is divided into a collapsible left Media Library, central timeline viewer, collapsible right inspector, and bottom gapless clip strip. Media Library rows are keyed by asset UUID and show a neutral thumbnail placeholder, filename, duration, dimensions, frame rate, and timeline usage count. Importing into an existing project adds sources to the library without silently creating clips; a full source is appended explicitly or dragged to a visible timeline boundary, and the same asset can be inserted repeatedly. Removal is routed through `removeUnusedMedia`, so a referenced source remains visible and the error reports its exact usage count. Import inspection is asynchronous, ordered, and surfaced as progress rather than blocking the main actor without feedback.
+
+The central region is deliberately a timeline viewer, not a source in/out editor. Library selection exposes source facts in the inspector; timeline selection exposes clip facts. There is no second source playhead or source-range workflow hidden in this shell.
+
+`TimelineViewportMath` converts each derived rational frame position directly to a horizontal pixel coordinate at the current pixels-per-second scale; clip positions are never accumulated from prior floating-point widths. The timeline uses a narrow `NSScrollView` bridge for native trackpad scrolling and exact content offsets while clip/ruler/playhead content stays SwiftUI. Zoom is logarithmic from overview to frame detail, works from the slider or pinch gesture, and recalculates the offset so the visible playhead—or pinch start location—remains under the same viewport point. **Fit Timeline** includes the entire duration even at the 30-minute target.
+
+Major tick spacing adapts in integer timeline-frame steps and labels use exact non-drop `HH:MM:SS:FF`. Click/drag scrubbing snaps to gapless clip boundaries within an eight-pixel threshold; holding Option temporarily disables snapping. Timeline thumbnails are requested only when a clip intersects the visible width plus a 260-pixel prefetch margin. A clip with no configured stabilization has no badge; the UI already defines distinct shield and warning shapes with tooltip/accessibility text for valid and stale states, while T16 will replace the current conservative “configured means unvalidated/stale” result with full cache-derived semantics.
+
 `PlaybackCompositionBuilder` constructs an `AVMutableComposition` from the ordered clip array. An unstabilized or stale clip inserts its exact source range. A valid stabilized clip inserts the corresponding range from its cached proxy. An `AVMutableVideoComposition` applies the timeline canvas, aspect-fit transform, black padding, and frame duration. Audio comes from the same source/proxy range and remains linked. Give each clip an isolated audio composition track and combine them with an explicit `AVAudioMix`; the T02 spike found AAC-boundary discontinuities when disjoint clip ranges reused one composition audio track. Track pooling is allowed later only if the parity fixtures remain green.
 
 Structural edits rebuild the in-memory composition; they do not render a full-timeline proxy. Preserve playhead position where possible and rebuild off the main actor, installing the completed player item on `@MainActor`.
+
+The Phase 2 implementation follows that boundary explicitly. `PlaybackCompositionBuilder` runs in a detached user-initiated task, checks cancellation between clips, and returns fully configured composition objects that are treated as immutable. `PlaybackCoordinator` installs the `AVPlayerItem` on the main actor, retains the latest requested frame even when a newer edit supersedes an in-flight build, resumes playback when appropriate, and seeks with zero tolerance during timeline scrubbing. Player time is floored to an exact timeline frame and mapped through `PlaybackSegmentMap` to the logical clip and original source time; the selected-clip inspector exposes that mapping. A `PlaybackMediaSource` override can replace the physical URL/range per clip while logical mapping remains tied to the original project clip, which is the stable integration seam T17 will use for valid stabilized proxies.
+
+The composition uses one non-overlapping video track with one instruction per clip, but one isolated audio track per clip and an explicit `AVAudioMix`. Automated tests recreate the T02 24 fps mixed-format fixture and assert 60 gapless frames, exact cut ranges, canvas/frame duration, three audio tracks, and source-time mapping at every tested boundary. The stabilized-source override is also exercised without changing logical timeline mapping.
 
 The preview is allowed to use the existing 1024-pixel stabilized proxies and bilinear interpolation. Final export always returns to source media and full-quality bicubic stabilization. Automated parity tests must prove that AVFoundation preview timing and FFmpeg output timing agree at every cut.
 
@@ -348,11 +364,19 @@ The T02 parity spike rendered equivalent three-clip compositions through AVFound
 
 Generate original-source thumbnails lazily with `AVAssetImageGenerator`, keyed by asset fingerprint, requested source frame, and display size. Visible timeline regions request thumbnails; off-screen work is cancelled or deprioritized. Deduplicate requests shared by duplicate/split clips. Thumbnail failure shows a neutral placeholder and does not make media unusable.
 
+`ThumbnailRequest` snaps the requested source time to an exact source-frame index before forming its identity. Its cache key contains the asset fingerprint, exact rational source time/frame, pixel width and height, and thumbnail processing revision; it intentionally contains no clip ID or stabilization state. Duplicate clips requesting the same original frame therefore share both in-flight work and the persistent JPEG, while a split/trim that changes the source start requests the correct new frame.
+
+`ThumbnailService` is an actor with one task per project/cache key and a set of visible consumer UUIDs. SwiftUI library and timeline cells live in lazy stacks, which instantiate the visible region plus the framework's small prefetch window. When a cell leaves that region it removes its consumer; generation is cancelled only when no duplicate consumer remains. `AVAssetImageGenerator` runs asynchronously with preferred transform, bounded output size, and zero requested-time tolerance. Cache hits survive reopening, and generation or JPEG failures remain neutral placeholders rather than media errors.
+
 ## 8. Undo/redo and autosave
 
 Continue using value semantics. At the target scale, storing prior `ProjectState` values with Swift copy-on-write is simple and cheap enough, provided generated caches and inspected binary objects are outside the state.
 
 `ProjectHistory` contains session-local undo and redo stacks of copy-on-write `ProjectState` values. Each command records one prior state and invalidates redo after a divergent edit. A trim drag has a `TrimTransaction` containing only its original and current candidate source ranges; the persisted/in-memory project value is unchanged until pointer-up applies one validated trim command. Cancel discards the transaction. Project selection and playhead movement are outside both project state and history.
+
+The Phase 2 timeline exposes leading/trailing handles only on the selected clip. Pointer motion is converted by `TimelineTrimMapper` from timeline-frame delta to exact source frames, including mixed-rate and outward non-destructive restoration, then validated against a temporary value-state editor. That candidate drives live gapless ripple layout and inspector values without touching the document session. Pointer-up sends one begin/update/commit transaction to the session; Escape, selection change, or undo during the gesture discards the candidate. No explicit **Confirm Trim** action exists in the project editor.
+
+The frame-aligned playhead enables **Split** only strictly inside the selected clip. Duplicate selects the new adjacent clip, ripple-delete selects the surviving clip at the same ordinal when possible, and both move the playhead to that selection's start. Clip drags use the same visible boundary targets as Media Library drops and translate pre-removal boundary indices correctly when moving forward. Toolbar and **Clip** menu actions share selection/trim/processing enablement; keyboard editing shortcuts remain deferred as planned.
 
 After a committed command or undo/redo, schedule autosave. A failed autosave leaves the last valid file intact and shows a persistent error; it must not erase in-memory edits.
 

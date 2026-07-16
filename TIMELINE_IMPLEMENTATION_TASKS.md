@@ -204,12 +204,12 @@ Acceptance:
 
 Dependencies: T08.
 
-- [ ] Add **New Project** and **Open Project…** startup actions.
-- [ ] Open dropped `.frogmouth` files.
-- [ ] Create an untitled project from dropped video files and append them in dropped order.
-- [ ] Enforce one open project at a time with normal save checks.
-- [ ] Route standard New/Open/Save/Save As/Close commands.
-- [ ] Keep FFmpeg startup validation and setup guidance intact.
+- [x] Add **New Project** and **Open Project…** startup actions.
+- [x] Open dropped `.frogmouth` files.
+- [x] Create an untitled project from dropped video files and append them in dropped order.
+- [x] Enforce one open project at a time with normal save checks.
+- [x] Route standard New/Open/Save/Save As/Close commands.
+- [x] Keep FFmpeg startup validation and setup guidance intact.
 
 Acceptance:
 
@@ -221,12 +221,12 @@ Acceptance:
 
 Dependencies: T06, T07, T10.
 
-- [ ] Add collapsible left library, centre viewer, right inspector, and bottom timeline regions.
-- [ ] Import one or several sources into the library with progress/error feedback.
-- [ ] Show thumbnail placeholder, filename, duration, and compact media facts.
-- [ ] Append or drag a full source into a timeline boundary.
-- [ ] Allow repeated insertion of one asset.
-- [ ] Refuse removal while referenced and show the usage count.
+- [x] Add collapsible left library, centre viewer, right inspector, and bottom timeline regions.
+- [x] Import one or several sources into the library with progress/error feedback.
+- [x] Show thumbnail placeholder, filename, duration, and compact media facts.
+- [x] Append or drag a full source into a timeline boundary.
+- [x] Allow repeated insertion of one asset.
+- [x] Refuse removal while referenced and show the usage count.
 
 Acceptance:
 
@@ -240,12 +240,12 @@ Dependencies: T09, T11.
 
 Suggested component: `ThumbnailService` using `AVAssetImageGenerator`.
 
-- [ ] Request thumbnails only for visible timeline/library content plus a small prefetch margin.
-- [ ] Deduplicate requests across duplicate and split clips.
-- [ ] Cache by source fingerprint, exact requested frame, and display size.
-- [ ] Cancel or deprioritize off-screen requests.
-- [ ] Use neutral placeholders on failure.
-- [ ] Never regenerate thumbnails merely because stabilization changes.
+- [x] Request thumbnails only for visible timeline/library content plus a small prefetch margin.
+- [x] Deduplicate requests across duplicate and split clips.
+- [x] Cache by source fingerprint, exact requested frame, and display size.
+- [x] Cancel or deprioritize off-screen requests.
+- [x] Use neutral placeholders on failure.
+- [x] Never regenerate thumbnails merely because stabilization changes.
 
 Acceptance:
 
@@ -257,13 +257,13 @@ Acceptance:
 
 Dependencies: T06, T11, T12.
 
-- [ ] Map exact timeline time to horizontal coordinates from a pixels-per-second scale.
-- [ ] Render thumbnail clips, filename labels, selection, boundaries, stabilization icons, and playhead.
-- [ ] Add horizontal scrolling, zoom slider, pinch-to-zoom, and **Fit Timeline**.
-- [ ] Preserve the playhead/pointer anchor during zoom.
-- [ ] Add adaptive timecode ticks and click/drag scrubbing.
-- [ ] Add snapping with a temporary-disable modifier.
-- [ ] Use icon shape plus tooltip/accessibility text for stabilization states.
+- [x] Map exact timeline time to horizontal coordinates from a pixels-per-second scale.
+- [x] Render thumbnail clips, filename labels, selection, boundaries, stabilization icons, and playhead.
+- [x] Add horizontal scrolling, zoom slider, pinch-to-zoom, and **Fit Timeline**.
+- [x] Preserve the playhead/pointer anchor during zoom.
+- [x] Add adaptive timecode ticks and click/drag scrubbing.
+- [x] Add snapping with a temporary-disable modifier.
+- [x] Use icon shape plus tooltip/accessibility text for stabilization states.
 
 Acceptance:
 
@@ -275,14 +275,14 @@ Acceptance:
 
 Dependencies: T06, T13.
 
-- [ ] Select one clip and expose its details in the inspector.
-- [ ] Add trim handles with live gapless ripple feedback.
-- [ ] Commit one undo step on pointer-up and restore on cancellation.
-- [ ] Split selected clip at the frame-aligned playhead.
-- [ ] Drag to reorder with a clear insertion indicator.
-- [ ] Duplicate and ripple-delete the selected clip.
-- [ ] Remove the old explicit **Confirm Trim** workflow from the new editor.
-- [ ] Wire toolbar/menu enablement to selection and processing state.
+- [x] Select one clip and expose its details in the inspector.
+- [x] Add trim handles with live gapless ripple feedback.
+- [x] Commit one undo step on pointer-up and restore on cancellation.
+- [x] Split selected clip at the frame-aligned playhead.
+- [x] Drag to reorder with a clear insertion indicator.
+- [x] Duplicate and ripple-delete the selected clip.
+- [x] Remove the old explicit **Confirm Trim** workflow from the new editor.
+- [x] Wire toolbar/menu enablement to selection and processing state.
 
 Acceptance:
 
@@ -296,13 +296,13 @@ Dependencies: T02, T06, T07, T14.
 
 Suggested components: `PlaybackCompositionBuilder`, `PlaybackCoordinator`.
 
-- [ ] Assemble ordered source ranges into an `AVMutableComposition`.
-- [ ] Apply aspect-fit/pad and timeline frame duration with `AVMutableVideoComposition`.
-- [ ] Preserve linked audio and hard cuts.
-- [ ] Rebuild off the main actor and install player items on `@MainActor`.
-- [ ] Retain playhead position where possible after edits.
-- [ ] Map player time back to selected clip/source time exactly.
-- [ ] Add valid stabilized-proxy substitution after T17 without changing public composition semantics.
+- [x] Assemble ordered source ranges into an `AVMutableComposition`.
+- [x] Apply aspect-fit/pad and timeline frame duration with `AVMutableVideoComposition`.
+- [x] Preserve linked audio and hard cuts.
+- [x] Rebuild off the main actor and install player items on `@MainActor`.
+- [x] Retain playhead position where possible after edits.
+- [x] Map player time back to selected clip/source time exactly.
+- [x] Preserve a public source-override seam so T17 can substitute valid stabilized proxies without changing composition semantics.
 
 Acceptance:
 
