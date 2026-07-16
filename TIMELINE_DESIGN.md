@@ -274,17 +274,21 @@ Use an app-managed persistent-but-disposable directory such as:
 
 A stabilization cache key includes the asset fingerprint, analyzed source range, ordered preceding pass configuration, current pass profile, frogmouth processing revision, FFmpeg/libvidstab version, and proxy settings. Cache deletion never corrupts a project; it changes configured stabilization to stale. Provide **Clear Project Cache** and **Clear All Caches**.
 
-### Required transform-alignment spike
+### Transform alignment after split — validated decision
 
-`vidstab` transform rows are frame-relative. A child produced by splitting an analyzed range cannot blindly seek to its own source start and feed the unsliced parent `.trf`; the first transform would apply to the wrong frame.
+`vidstabdetect` ASCII rows contain frame-relative local-motion observations. `vidstabtransform` integrates and smooths those observations over the complete input domain. A child produced by splitting an analyzed range therefore cannot seek to its own source start and consume a sliced/renumbered parent `.trf`: both the prior integrated path and surrounding smoothing window would change.
 
-Before finalizing the render planner, prove one of these strategies against a full-domain reference render:
+The T01 spike in [`validate-stabilization-split.sh`](scripts/spikes/validate-stabilization-split.sh) established the render rule:
 
-1. Safely slice and renumber ASCII transform rows for an inward-trimmed child; preferred if frame-identical.
-2. Apply transforms across their original analysis domain and trim afterward; correct but potentially very expensive when many children share a parent range.
-3. Materialize a reusable high-quality stabilized intermediate; potentially large and contrary to lightweight caching.
+1. Each stabilization effect retains the analysis domain on which its transforms were computed.
+2. Apply the transform across that complete domain before trimming any descendant clip.
+3. Model export as a directed acyclic filter graph. Descendants with a common stabilized lineage share one decoded/transformed prefix, then an FFmpeg `split` branches into their exact child ranges.
+4. A later child-specific stabilization pass starts a new effect node after that branch and records the child's then-current domain.
+5. Preview proxies likewise cover the effect's analysis domain; child clips map to exact proxy subranges.
 
-Do not choose based on assumption. The spike must compare first/last frames, stacked passes, non-integer frame rates, split boundaries, render time, and disk usage. Re-analysis on split is not an acceptable fallback because it violates the confirmed inheritance behavior.
+This strategy was frame-identical to a full stabilized reference for every child frame at 24 fps and 60000/1001 fps, including first/last boundaries and two stacked passes. Naively sliced local motions differed on 40 of 48 frames in the 24 fps child. On the small fixture, one shared-prefix render took 0.37 seconds versus 0.68 seconds for two repeated full-domain renders at 24 fps, and 0.39 versus 0.74 seconds at 60000/1001. These absolute timings are not production benchmarks; they demonstrate elimination of duplicated work.
+
+Do not slice `.trf` local-motion rows and do not re-analyze on split. Also avoid a full-quality stabilized intermediate: it is unnecessary when one filter graph can share the prefix and would create unacceptable 4K disk usage. Cache identity and render planning must preserve effect-lineage and analysis-domain UUIDs so common prefixes can be recognized after split, duplicate, reorder, save, and reopen. Detailed evidence is in [the T01 spike record](Tests/Spikes/T01_STABILIZATION_SPLIT.md).
 
 ## 7. Preview architecture
 

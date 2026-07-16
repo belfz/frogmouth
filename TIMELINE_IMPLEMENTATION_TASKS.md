@@ -35,13 +35,13 @@ Acceptance:
 
 Dependencies: T00.
 
-- [ ] Analyze and stabilize a known clip over a parent range.
-- [ ] Split/trim the range at several frame-aligned points, including 59.94 fps boundaries.
-- [ ] Prototype slicing and renumbering the ASCII `.trf` rows.
-- [ ] Compare child renders with the corresponding frames from a full-domain stabilized render.
-- [ ] Repeat with two stacked stabilization passes.
-- [ ] Measure the fallback strategy of processing the full analysis domain and trimming afterward.
-- [ ] Document the chosen algorithm and cache representation in `TIMELINE_DESIGN.md`.
+- [x] Analyze and stabilize a known clip over a parent range.
+- [x] Split/trim the range at several frame-aligned points, including 59.94 fps boundaries.
+- [x] Prototype slicing and renumbering the ASCII `.trf` rows.
+- [x] Compare child renders with the corresponding frames from a full-domain stabilized render.
+- [x] Repeat with two stacked stabilization passes.
+- [x] Measure the fallback strategy of processing the full analysis domain and trimming afterward.
+- [x] Document the chosen algorithm and cache representation in `TIMELINE_DESIGN.md`.
 
 Acceptance:
 
