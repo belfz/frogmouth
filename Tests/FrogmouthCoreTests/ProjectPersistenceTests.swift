@@ -229,7 +229,17 @@ import Testing
     try await session.save(to: projectURL)
     let expected = await session.project
     let originalCanUndo = await session.canUndo
+    let importedURLs = await session.resolvedMediaURLs
     #expect(originalCanUndo)
+    #expect(importedURLs[asset.id] == mediaURL.standardizedFileURL)
+
+    #expect(try await session.undo())
+    let URLsAfterUndo = await session.resolvedMediaURLs
+    #expect(URLsAfterUndo.isEmpty)
+    #expect(try await session.redo())
+    let URLsAfterRedo = await session.resolvedMediaURLs
+    #expect(URLsAfterRedo[asset.id] == mediaURL.standardizedFileURL)
+    try await session.save()
 
     let reopened = try await ProjectDocumentSession.open(url: projectURL)
     let reopenedProject = await reopened.project
@@ -240,6 +250,36 @@ import Testing
     #expect(!reopenedCanUndo)
     #expect(!reopenedCanRedo)
     #expect(!reopenedModified)
+}
+
+@Test func discardingChangesCancelsPendingAutosaveAndRestoresTheSavedSnapshot() async throws {
+    let root = try makePersistenceTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let projectURL = root.appendingPathComponent("Discard.frogmouth")
+    let originalID = UUID(uuidString: "AAAAAAAA-8600-0000-0000-000000000001")!
+    let session = ProjectDocumentSession.newProject(
+        name: "Discard",
+        id: originalID,
+        autosaveDelay: .milliseconds(80)
+    )
+    try await session.save(to: projectURL)
+    let original = try decodeProject(at: projectURL)
+    let asset = try makePersistenceAsset(
+        id: UUID(uuidString: "BBBBBBBB-8600-0000-0000-000000000002")!,
+        path: "/tmp/discarded.mp4"
+    )
+    try await session.apply(.importMedia(asset))
+
+    await session.discardUnsavedChanges()
+    try await Task.sleep(for: .milliseconds(120))
+
+    let current = await session.project
+    let modified = await session.isModified
+    let canUndo = await session.canUndo
+    #expect(current == original)
+    #expect(!modified)
+    #expect(!canUndo)
+    #expect(try decodeProject(at: projectURL) == original)
 }
 
 private struct AlwaysFailingProjectWriter: ProjectFileWriting {

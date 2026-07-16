@@ -204,12 +204,12 @@ Acceptance:
 
 Dependencies: T08.
 
-- [ ] Add **New Project** and **Open Project…** startup actions.
-- [ ] Open dropped `.frogmouth` files.
-- [ ] Create an untitled project from dropped video files and append them in dropped order.
-- [ ] Enforce one open project at a time with normal save checks.
-- [ ] Route standard New/Open/Save/Save As/Close commands.
-- [ ] Keep FFmpeg startup validation and setup guidance intact.
+- [x] Add **New Project** and **Open Project…** startup actions.
+- [x] Open dropped `.frogmouth` files.
+- [x] Create an untitled project from dropped video files and append them in dropped order.
+- [x] Enforce one open project at a time with normal save checks.
+- [x] Route standard New/Open/Save/Save As/Close commands.
+- [x] Keep FFmpeg startup validation and setup guidance intact.
 
 Acceptance:
 

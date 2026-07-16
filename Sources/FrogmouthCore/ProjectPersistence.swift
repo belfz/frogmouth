@@ -313,14 +313,20 @@ public actor ProjectDocumentSession {
         try ensureNotSaving()
         let previous = editor.project
         try editor.apply(command)
-        if editor.project != previous { await scheduleAutosaveIfPossible() }
+        if editor.project != previous {
+            reconcileResolvedMediaURLs()
+            await scheduleAutosaveIfPossible()
+        }
     }
 
     @discardableResult
     public func undo() async throws -> Bool {
         try ensureNotSaving()
         let changed = try editor.undo()
-        if changed { await scheduleAutosaveIfPossible() }
+        if changed {
+            reconcileResolvedMediaURLs()
+            await scheduleAutosaveIfPossible()
+        }
         return changed
     }
 
@@ -328,7 +334,10 @@ public actor ProjectDocumentSession {
     public func redo() async throws -> Bool {
         try ensureNotSaving()
         let changed = try editor.redo()
-        if changed { await scheduleAutosaveIfPossible() }
+        if changed {
+            reconcileResolvedMediaURLs()
+            await scheduleAutosaveIfPossible()
+        }
         return changed
     }
 
@@ -387,6 +396,13 @@ public actor ProjectDocumentSession {
         await autosave.flush()
     }
 
+    public func discardUnsavedChanges() async {
+        await autosave.cancel()
+        editor = ProjectEditor(project: lastSavedProject)
+        lastSaveError = nil
+        reconcileResolvedMediaURLs()
+    }
+
     private func saveCurrentProject(to url: URL, updateLocation: Bool) async throws {
         try ensureNotSaving()
         saveInProgress = true
@@ -409,6 +425,26 @@ public actor ProjectDocumentSession {
         let snapshot = editor.project
         await autosave.schedule(project: snapshot, url: fileURL) { [weak self] result in
             await self?.handleAutosaveResult(result)
+        }
+    }
+
+    private func reconcileResolvedMediaURLs() {
+        let assetIDs = Set(editor.project.mediaLibrary.map(\.id))
+        resolvedMediaURLs = resolvedMediaURLs.filter { assetIDs.contains($0.key) }
+        for asset in editor.project.mediaLibrary where resolvedMediaURLs[asset.id] == nil {
+            if let fileURL,
+               let resolved = ProjectMediaResolver().resolve(asset.path, projectURL: fileURL) {
+                resolvedMediaURLs[asset.id] = resolved
+                continue
+            }
+            let fallback = URL(fileURLWithPath: asset.path.absoluteFallback).standardizedFileURL
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(
+                atPath: fallback.path,
+                isDirectory: &isDirectory
+            ), !isDirectory.boolValue {
+                resolvedMediaURLs[asset.id] = fallback
+            }
         }
     }
 

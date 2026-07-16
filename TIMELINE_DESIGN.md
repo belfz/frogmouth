@@ -237,6 +237,10 @@ All manual and automatic writes pass through one actor-isolated `ProjectDocument
 
 `ProjectAutosaveCoordinator` snapshots only committed project values and debounces them for 750 ms. A newer snapshot cancels an older pending debounce; the document store serializes any write already underway, ensuring the newest scheduled value is written last. Starting a manual Save or Save As cancels pending autosave first. Trim-pointer updates live solely in `TrimTransaction`, so no autosave is scheduled until pointer-up commits the one trim command; undo and redo schedule autosave like any other committed edit.
 
+The Phase 2 application shell owns exactly one `ProjectDocumentSession`. Startup offers **New Project**, **Open Project…**, and creation from one or more videos, with no Recent Projects state. Dropping a `.frogmouth` file requests an open; dropping videos creates an untitled project when none is open and appends full-source clips in drop order. Standard New/Open/Save/Save As/Close/Undo/Redo commands route to the document session, and the FFmpeg startup gate remains in front of the shell.
+
+Replacing or closing a modified project enters one shared Save/Discard/Cancel decision. Save performs first-save location selection when necessary; Discard cancels any pending debounced autosave, restores the last successful snapshot, and clears history before continuing. The window close button uses the same decision rather than bypassing it. Imported runtime URLs are reconciled as media-library edits move through apply, undo, and redo, while only portable path references remain in project JSON.
+
 ## 5. Media compatibility and conformance
 
 The first timeline clip establishes the output canvas, frame rate, colour signature, and baseline audio format.
