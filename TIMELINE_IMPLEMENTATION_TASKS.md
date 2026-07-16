@@ -240,12 +240,12 @@ Dependencies: T09, T11.
 
 Suggested component: `ThumbnailService` using `AVAssetImageGenerator`.
 
-- [ ] Request thumbnails only for visible timeline/library content plus a small prefetch margin.
-- [ ] Deduplicate requests across duplicate and split clips.
-- [ ] Cache by source fingerprint, exact requested frame, and display size.
-- [ ] Cancel or deprioritize off-screen requests.
-- [ ] Use neutral placeholders on failure.
-- [ ] Never regenerate thumbnails merely because stabilization changes.
+- [x] Request thumbnails only for visible timeline/library content plus a small prefetch margin.
+- [x] Deduplicate requests across duplicate and split clips.
+- [x] Cache by source fingerprint, exact requested frame, and display size.
+- [x] Cancel or deprioritize off-screen requests.
+- [x] Use neutral placeholders on failure.
+- [x] Never regenerate thumbnails merely because stabilization changes.
 
 Acceptance:
 

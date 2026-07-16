@@ -356,6 +356,10 @@ The T02 parity spike rendered equivalent three-clip compositions through AVFound
 
 Generate original-source thumbnails lazily with `AVAssetImageGenerator`, keyed by asset fingerprint, requested source frame, and display size. Visible timeline regions request thumbnails; off-screen work is cancelled or deprioritized. Deduplicate requests shared by duplicate/split clips. Thumbnail failure shows a neutral placeholder and does not make media unusable.
 
+`ThumbnailRequest` snaps the requested source time to an exact source-frame index before forming its identity. Its cache key contains the asset fingerprint, exact rational source time/frame, pixel width and height, and thumbnail processing revision; it intentionally contains no clip ID or stabilization state. Duplicate clips requesting the same original frame therefore share both in-flight work and the persistent JPEG, while a split/trim that changes the source start requests the correct new frame.
+
+`ThumbnailService` is an actor with one task per project/cache key and a set of visible consumer UUIDs. SwiftUI library and timeline cells live in lazy stacks, which instantiate the visible region plus the framework's small prefetch window. When a cell leaves that region it removes its consumer; generation is cancelled only when no duplicate consumer remains. `AVAssetImageGenerator` runs asynchronously with preferred transform, bounded output size, and zero requested-time tolerance. Cache hits survive reopening, and generation or JPEG failures remain neutral placeholders rather than media errors.
+
 ## 8. Undo/redo and autosave
 
 Continue using value semantics. At the target scale, storing prior `ProjectState` values with Swift copy-on-write is simple and cheap enough, provided generated caches and inspected binary objects are outside the state.

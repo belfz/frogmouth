@@ -1,3 +1,4 @@
+import AppKit
 import FrogmouthCore
 import SwiftUI
 
@@ -92,6 +93,7 @@ private struct MediaLibraryView: View {
                         ForEach(project.mediaLibrary) { asset in
                             MediaLibraryRow(
                                 document: document,
+                                projectID: project.id,
                                 asset: asset,
                                 usageCount: project.clips.count { $0.assetID == asset.id },
                                 isSelected: document.selectedAssetID == asset.id
@@ -119,19 +121,18 @@ private struct MediaLibraryView: View {
 
 private struct MediaLibraryRow: View {
     @ObservedObject var document: ProjectDocumentViewModel
+    let projectID: ProjectState.ID
     let asset: MediaAsset
     let usageCount: Int
     let isSelected: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.black.opacity(0.78))
-                Image(systemName: "film")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-            }
+            ThumbnailArtwork(
+                service: document.thumbnailService,
+                projectID: projectID,
+                request: thumbnailRequest
+            )
             .aspectRatio(16 / 9, contentMode: .fit)
             .overlay(alignment: .bottomTrailing) {
                 Text(formatDuration(asset.inspected.duration))
@@ -192,6 +193,19 @@ private struct MediaLibraryRow: View {
 
     private var filename: String {
         URL(fileURLWithPath: asset.path.absoluteFallback).lastPathComponent
+    }
+
+    private var thumbnailRequest: ThumbnailRequest? {
+        try? ThumbnailRequest(
+            assetID: asset.id,
+            sourceFingerprint: asset.fingerprint,
+            mediaURL: document.resolvedURL(for: asset.id)
+                ?? URL(fileURLWithPath: asset.path.absoluteFallback),
+            frameRate: asset.inspected.frameRate,
+            requestedSourceTime: .zero,
+            pixelWidth: 320,
+            pixelHeight: 180
+        )
     }
 }
 
@@ -332,13 +346,14 @@ private struct TimelineAssemblyStrip: View {
             .padding(.horizontal, 12)
 
             ScrollView(.horizontal) {
-                HStack(spacing: 0) {
+                LazyHStack(spacing: 0) {
                     ForEach(Array(project.clips.enumerated()), id: \.element.id) { index, clip in
                         TimelineInsertionBoundary(document: document, index: index)
                         TimelineAssemblyClip(
                             document: document,
+                            projectID: project.id,
                             clip: clip,
-                            filename: filename(for: clip.assetID),
+                            asset: asset(for: clip.assetID),
                             isSelected: document.selectedClipID == clip.id
                         )
                     }
@@ -358,28 +373,25 @@ private struct TimelineAssemblyStrip: View {
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
-    private func filename(for assetID: MediaAsset.ID) -> String {
-        guard let asset = project.mediaLibrary.first(where: { $0.id == assetID }) else {
-            return "Missing source"
-        }
-        return URL(fileURLWithPath: asset.path.absoluteFallback).lastPathComponent
+    private func asset(for assetID: MediaAsset.ID) -> MediaAsset? {
+        project.mediaLibrary.first { $0.id == assetID }
     }
 }
 
 private struct TimelineAssemblyClip: View {
     @ObservedObject var document: ProjectDocumentViewModel
+    let projectID: ProjectState.ID
     let clip: TimelineClip
-    let filename: String
+    let asset: MediaAsset?
     let isSelected: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color.black.opacity(0.76))
-                Image(systemName: "film")
-                    .foregroundStyle(.secondary)
-            }
+            ThumbnailArtwork(
+                service: document.thumbnailService,
+                projectID: projectID,
+                request: thumbnailRequest
+            )
             .frame(height: 50)
             Text(filename)
                 .font(.caption.weight(.medium))
@@ -400,6 +412,99 @@ private struct TimelineAssemblyClip: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: 7))
         .onTapGesture { document.selectClip(clip.id) }
+    }
+
+    private var filename: String {
+        guard let asset else { return "Missing source" }
+        return URL(fileURLWithPath: asset.path.absoluteFallback).lastPathComponent
+    }
+
+    private var thumbnailRequest: ThumbnailRequest? {
+        guard let asset else { return nil }
+        return try? ThumbnailRequest(
+            assetID: asset.id,
+            sourceFingerprint: asset.fingerprint,
+            mediaURL: document.resolvedURL(for: asset.id)
+                ?? URL(fileURLWithPath: asset.path.absoluteFallback),
+            frameRate: asset.inspected.frameRate,
+            requestedSourceTime: clip.sourceRange.start,
+            pixelWidth: 300,
+            pixelHeight: 100
+        )
+    }
+}
+
+private struct ThumbnailArtwork: View {
+    let service: ThumbnailService
+    let projectID: ProjectState.ID
+    let request: ThumbnailRequest?
+
+    @State private var image: NSImage?
+    @State private var failed = false
+    @State private var consumerID = UUID()
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color.black.opacity(0.78))
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .clipped()
+            } else {
+                Image(systemName: failed ? "photo.badge.exclamationmark" : "film")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .task(id: request) {
+            image = nil
+            failed = false
+            guard let request else {
+                failed = true
+                return
+            }
+            let currentConsumer = UUID()
+            consumerID = currentConsumer
+            do {
+                let url = try await withTaskCancellationHandler {
+                    try await service.thumbnail(
+                        for: request,
+                        projectID: projectID,
+                        consumerID: currentConsumer
+                    )
+                } onCancel: {
+                    Task {
+                        await service.cancel(
+                            request: request,
+                            projectID: projectID,
+                            consumerID: currentConsumer
+                        )
+                    }
+                }
+                try Task.checkCancellation()
+                image = NSImage(contentsOf: url)
+                failed = image == nil
+            } catch is CancellationError {
+                // Lazy cells cancel work when they leave the visible/prefetch region.
+            } catch {
+                failed = true
+            }
+        }
+        .onDisappear {
+            guard let request else { return }
+            let currentConsumer = consumerID
+            Task {
+                await service.cancel(
+                    request: request,
+                    projectID: projectID,
+                    consumerID: currentConsumer
+                )
+            }
+        }
+        .accessibilityLabel(failed ? "Thumbnail unavailable" : "Video thumbnail")
     }
 }
 

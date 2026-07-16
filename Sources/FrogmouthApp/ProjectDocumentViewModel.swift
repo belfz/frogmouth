@@ -34,6 +34,7 @@ final class ProjectDocumentViewModel: ObservableObject {
     private let store: ProjectDocumentStore
     private let factsInspector: any ProjectMediaFactsInspecting
     private let fingerprinter: any MediaFingerprinting
+    let thumbnailService: ThumbnailService
     private var session: ProjectDocumentSession?
     private var pendingTransition: PendingTransition?
     private var autosaveStatusTask: Task<Void, Never>?
@@ -42,11 +43,13 @@ final class ProjectDocumentViewModel: ObservableObject {
     init(
         store: ProjectDocumentStore = ProjectDocumentStore(),
         factsInspector: any ProjectMediaFactsInspecting = AVProjectMediaFactsInspector(),
-        fingerprinter: any MediaFingerprinting = MediaFingerprinter()
+        fingerprinter: any MediaFingerprinting = MediaFingerprinter(),
+        thumbnailService: ThumbnailService = ThumbnailService()
     ) {
         self.store = store
         self.factsInspector = factsInspector
         self.fingerprinter = fingerprinter
+        self.thumbnailService = thumbnailService
     }
 
     var hasProject: Bool { project != nil }
