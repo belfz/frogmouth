@@ -193,6 +193,14 @@ private struct TimelineTrackContent: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color(nsColor: .controlBackgroundColor)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(
+                        minimumDistance: 0,
+                        coordinateSpace: .named(TimelineCoordinateSpace.track)
+                    )
+                    .onChanged { value in scrub(atX: value.location.x) }
+                )
 
             TimelineRuler(
                 frameRate: project.timelineFormat?.frameRate,
@@ -202,6 +210,7 @@ private struct TimelineTrackContent: View {
                 viewportWidth: viewportWidth
             )
             .frame(width: contentWidth, height: rulerHeight)
+            .allowsHitTesting(false)
 
             if let timelineIndex {
                 if timelineIndex.entries.isEmpty {
@@ -227,7 +236,11 @@ private struct TimelineTrackContent: View {
                             isSelected: document.selectedClipID == clip.id
                         )
                         .frame(width: width, height: clipHeight)
-                        .offset(x: startX, y: rulerHeight + 2)
+                        .position(
+                            x: startX + width / 2,
+                            y: rulerHeight + 2 + clipHeight / 2
+                        )
+                        .zIndex(document.selectedClipID == clip.id ? 2 : 0)
                     }
                 }
 
@@ -249,6 +262,7 @@ private struct TimelineTrackContent: View {
             }
         }
         .frame(width: contentWidth, height: rulerHeight + clipHeight + 4)
+        .coordinateSpace(name: TimelineCoordinateSpace.track)
         .contentShape(Rectangle())
         .overlay {
             RoundedRectangle(cornerRadius: 6)
@@ -258,10 +272,6 @@ private struct TimelineTrackContent: View {
                 )
                 .allowsHitTesting(false)
         }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in scrub(atX: value.location.x) }
-        )
         .dropDestination(for: String.self) { values, location in
             handleDrop(values, atX: location.x)
         } isTargeted: {
@@ -284,6 +294,7 @@ private struct TimelineTrackContent: View {
                     .offset(y: -1)
             }
             .offset(x: playheadX - 0.75)
+            .allowsHitTesting(false)
             .accessibilityLabel("Playhead")
             .accessibilityValue((try? frameRate.timecode(forFrame: document.playheadFrame)) ?? "")
         }
@@ -537,7 +548,10 @@ private struct TimelinePresentationClip: View {
         .frame(width: 14, height: 80)
         .contentShape(Rectangle())
         .highPriorityGesture(
-            DragGesture(minimumDistance: 0)
+            DragGesture(
+                minimumDistance: 0,
+                coordinateSpace: .named(TimelineCoordinateSpace.track)
+            )
                 .onChanged { value in
                     document.updateTrimPreview(
                         clipID: clip.id,
@@ -570,6 +584,10 @@ private struct TimelinePresentationClip: View {
               frames <= Double(Int64.max) else { return 0 }
         return Int64(frames.rounded(.toNearestOrAwayFromZero))
     }
+}
+
+private enum TimelineCoordinateSpace {
+    static let track = "frogmouth.timeline.track"
 }
 
 private struct TimelineDropBoundary: View {
