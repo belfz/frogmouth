@@ -19,11 +19,11 @@ This is the ordered execution backlog for [TIMELINE_DESIGN.md](TIMELINE_DESIGN.m
 
 Dependencies: none.
 
-- [ ] Record the current 14-test baseline and release build command.
-- [ ] Add a fixture generator for short, frame-numbered videos with distinctive audio tones.
-- [ ] Generate compatible variants: different dimensions, aspect ratios, rational frame rates, and a silent clip.
-- [ ] Generate at least one intentionally incompatible colour-signaling fixture.
-- [ ] Add helpers that inspect exact frame count, duration, audio presence, and colour tags.
+- [x] Record the current 14-test baseline and release build command.
+- [x] Add a fixture generator for short, frame-numbered videos with distinctive audio tones.
+- [x] Generate compatible variants: different dimensions, aspect ratios, rational frame rates, and a silent clip.
+- [x] Generate at least one intentionally incompatible colour-signaling fixture.
+- [x] Add helpers that inspect exact frame count, duration, audio presence, and colour tags.
 
 Acceptance:
 
@@ -457,4 +457,3 @@ These are intentionally not prerequisites for T00–T22:
 - [ ] Folder-assisted missing-media search and Relink UI.
 - [ ] Exposed stabilization-pass stack and per-pass controls.
 - [ ] User-configurable timeline/editor layout.
-
