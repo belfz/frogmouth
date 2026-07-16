@@ -213,7 +213,11 @@ Schema version 1 is locked by the human-readable [`ProjectSchemaV1.frogmouth`](T
 
 Store a path relative to the project when practical, plus an absolute fallback and inexpensive identity facts. On open, resolve and validate every Media Library entry. If any file is absent, keep the project unopened and show one error listing every missing path. The user restores the files externally and retries. There is no offline placeholder or Relink UI initially.
 
+`ProjectMediaResolver` always tries the project-relative candidate first and the absolute fallback second. `MediaFingerprint` is the regular file's exact byte size plus its POSIX modification timestamp in nanoseconds. This is deliberately inexpensive identity detection, not a content hash.
+
 If a file exists but its fingerprint changed, re-inspect it. Accept it only if existing clip ranges and compatibility constraints remain valid; otherwise report the conflict without modifying the project.
+
+`ProjectOpenValidator` performs resolution, fingerprinting, changed-file inspection, range checks, and timeline-colour checks against a candidate `ProjectState`; it returns the candidate and runtime resolved-URL map only after every check succeeds. Missing sources are aggregated before inspection. Changed-source errors name the full resolved path and affected clip IDs, and the caller's decoded state remains untouched so retrying after an external fix is safe.
 
 ### Save behavior
 
@@ -239,6 +243,8 @@ For compatible colour sources with different dimensions, aspect ratios, or frame
 - Convert to the timeline frame rate.
 - Normalize sample aspect ratio and timestamps.
 - Resample audio and conform channel layout for concatenation.
+
+`TimelineCompatibilityValidator` calculates the aspect-fit dimensions with checked integer arithmetic and nearest-pixel rounding, then divides odd padding with the extra pixel on the right or bottom. Its conformance facts separately report frame-rate conversion, audio resampling, and channel-layout conversion. AVFoundation inspection persists rational frame rate from the track's exact minimum frame duration; common-rate matching is only a fallback when the framework does not provide a usable duration.
 
 ### Known colour-management trade-off
 

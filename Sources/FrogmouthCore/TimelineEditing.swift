@@ -131,7 +131,7 @@ public struct TimelineIndex: Equatable, Sendable {
         entries.first { $0.clipID == clipID }
     }
 
-    fileprivate static func validateSourceRange(
+    static func validateSourceRange(
         _ range: MediaTimeRange,
         for asset: MediaAsset
     ) throws {
@@ -312,6 +312,9 @@ public enum ProjectCommand: Equatable, Sendable {
             throw TimelineEditError.mediaNotFound(clip.assetID)
         }
         try TimelineIndex.validateSourceRange(clip.sourceRange, for: asset)
+        if let format = project.timelineFormat {
+            _ = try TimelineCompatibilityValidator().validate(asset: asset, against: format)
+        }
         if project.timelineFormat == nil {
             project.timelineFormat = TimelineFormat(
                 width: asset.inspected.width,

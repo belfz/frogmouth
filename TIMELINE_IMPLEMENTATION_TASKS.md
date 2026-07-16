@@ -146,12 +146,12 @@ Dependencies: T03, T05.
 
 Suggested components: `ProjectMediaResolver`, extended `MediaInspector`, `TimelineCompatibilityValidator`.
 
-- [ ] Resolve relative paths first and absolute fallbacks second.
-- [ ] Validate all Media Library entries on project open.
-- [ ] Aggregate every missing path into one error and leave the project unopened.
-- [ ] Re-inspect changed fingerprints and validate existing clip ranges.
-- [ ] Validate colour compatibility on timeline insertion.
-- [ ] Calculate aspect-fit/pad and frame-rate conformance facts for compatible clips.
+- [x] Resolve relative paths first and absolute fallbacks second.
+- [x] Validate all Media Library entries on project open.
+- [x] Aggregate every missing path into one error and leave the project unopened.
+- [x] Re-inspect changed fingerprints and validate existing clip ranges.
+- [x] Validate colour compatibility on timeline insertion.
+- [x] Calculate aspect-fit/pad and frame-rate conformance facts for compatible clips.
 
 Acceptance:
 

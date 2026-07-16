@@ -4,9 +4,11 @@ import Foundation
 public struct MediaInfo: Equatable, Sendable {
     public let url: URL
     public let duration: TimeInterval
+    public let exactDuration: MediaTime
     public let width: Int
     public let height: Int
     public let frameRate: Double
+    public let exactFrameRate: FrameRate
     public let videoBitrate: Double
     public let videoCodec: String
     public let audioCodec: String?
@@ -19,9 +21,11 @@ public struct MediaInfo: Equatable, Sendable {
     public init(
         url: URL,
         duration: TimeInterval,
+        exactDuration: MediaTime,
         width: Int,
         height: Int,
         frameRate: Double,
+        exactFrameRate: FrameRate,
         videoBitrate: Double,
         videoCodec: String,
         audioCodec: String?,
@@ -33,9 +37,11 @@ public struct MediaInfo: Equatable, Sendable {
     ) {
         self.url = url
         self.duration = duration
+        self.exactDuration = exactDuration
         self.width = width
         self.height = height
         self.frameRate = frameRate
+        self.exactFrameRate = exactFrameRate
         self.videoBitrate = videoBitrate
         self.videoCodec = videoCodec
         self.audioCodec = audioCodec
