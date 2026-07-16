@@ -257,13 +257,13 @@ Acceptance:
 
 Dependencies: T06, T11, T12.
 
-- [ ] Map exact timeline time to horizontal coordinates from a pixels-per-second scale.
-- [ ] Render thumbnail clips, filename labels, selection, boundaries, stabilization icons, and playhead.
-- [ ] Add horizontal scrolling, zoom slider, pinch-to-zoom, and **Fit Timeline**.
-- [ ] Preserve the playhead/pointer anchor during zoom.
-- [ ] Add adaptive timecode ticks and click/drag scrubbing.
-- [ ] Add snapping with a temporary-disable modifier.
-- [ ] Use icon shape plus tooltip/accessibility text for stabilization states.
+- [x] Map exact timeline time to horizontal coordinates from a pixels-per-second scale.
+- [x] Render thumbnail clips, filename labels, selection, boundaries, stabilization icons, and playhead.
+- [x] Add horizontal scrolling, zoom slider, pinch-to-zoom, and **Fit Timeline**.
+- [x] Preserve the playhead/pointer anchor during zoom.
+- [x] Add adaptive timecode ticks and click/drag scrubbing.
+- [x] Add snapping with a temporary-disable modifier.
+- [x] Use icon shape plus tooltip/accessibility text for stabilization states.
 
 Acceptance:
 

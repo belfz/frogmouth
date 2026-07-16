@@ -28,7 +28,7 @@ struct ProjectEditorShell: View {
 
             Divider()
 
-            TimelineAssemblyStrip(document: document, project: project)
+            SequenceTimelineView(document: document, project: project)
                 .frame(minHeight: 150, idealHeight: 190, maxHeight: 240)
         }
         .toolbar {
@@ -326,115 +326,7 @@ private struct InspectorValue: View {
     }
 }
 
-private struct TimelineAssemblyStrip: View {
-    @ObservedObject var document: ProjectDocumentViewModel
-    let project: ProjectState
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Timeline")
-                    .font(.headline)
-                Text("Gapless · hard cuts")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("\(project.clips.count) clip\(project.clips.count == 1 ? "" : "s")")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 0) {
-                    ForEach(Array(project.clips.enumerated()), id: \.element.id) { index, clip in
-                        TimelineInsertionBoundary(document: document, index: index)
-                        TimelineAssemblyClip(
-                            document: document,
-                            projectID: project.id,
-                            clip: clip,
-                            asset: asset(for: clip.assetID),
-                            isSelected: document.selectedClipID == clip.id
-                        )
-                    }
-                    TimelineInsertionBoundary(document: document, index: project.clips.count)
-
-                    if project.clips.isEmpty {
-                        Text("Drag a Media Library source here")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 260, height: 90)
-                    }
-                }
-                .padding(.horizontal, 8)
-            }
-        }
-        .padding(.vertical, 10)
-        .background(Color(nsColor: .controlBackgroundColor))
-    }
-
-    private func asset(for assetID: MediaAsset.ID) -> MediaAsset? {
-        project.mediaLibrary.first { $0.id == assetID }
-    }
-}
-
-private struct TimelineAssemblyClip: View {
-    @ObservedObject var document: ProjectDocumentViewModel
-    let projectID: ProjectState.ID
-    let clip: TimelineClip
-    let asset: MediaAsset?
-    let isSelected: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ThumbnailArtwork(
-                service: document.thumbnailService,
-                projectID: projectID,
-                request: thumbnailRequest
-            )
-            .frame(height: 50)
-            Text(filename)
-                .font(.caption.weight(.medium))
-                .lineLimit(1)
-            Text(formatDuration(clip.sourceRange.duration))
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-        }
-        .padding(7)
-        .frame(width: 150, height: 108, alignment: .topLeading)
-        .background(
-            isSelected ? Color.accentColor.opacity(0.30) : Color.primary.opacity(0.06),
-            in: RoundedRectangle(cornerRadius: 7)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 7)
-                .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 7))
-        .onTapGesture { document.selectClip(clip.id) }
-    }
-
-    private var filename: String {
-        guard let asset else { return "Missing source" }
-        return URL(fileURLWithPath: asset.path.absoluteFallback).lastPathComponent
-    }
-
-    private var thumbnailRequest: ThumbnailRequest? {
-        guard let asset else { return nil }
-        return try? ThumbnailRequest(
-            assetID: asset.id,
-            sourceFingerprint: asset.fingerprint,
-            mediaURL: document.resolvedURL(for: asset.id)
-                ?? URL(fileURLWithPath: asset.path.absoluteFallback),
-            frameRate: asset.inspected.frameRate,
-            requestedSourceTime: clip.sourceRange.start,
-            pixelWidth: 300,
-            pixelHeight: 100
-        )
-    }
-}
-
-private struct ThumbnailArtwork: View {
+struct ThumbnailArtwork: View {
     let service: ThumbnailService
     let projectID: ProjectState.ID
     let request: ThumbnailRequest?
@@ -505,35 +397,6 @@ private struct ThumbnailArtwork: View {
             }
         }
         .accessibilityLabel(failed ? "Thumbnail unavailable" : "Video thumbnail")
-    }
-}
-
-private struct TimelineInsertionBoundary: View {
-    @ObservedObject var document: ProjectDocumentViewModel
-    let index: Int
-    @State private var isTargeted = false
-
-    var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(isTargeted ? Color.accentColor : Color.clear)
-                .frame(width: 3, height: 104)
-            Image(systemName: "plus.circle.fill")
-                .foregroundStyle(Color.accentColor)
-                .opacity(isTargeted ? 1 : 0)
-        }
-        .frame(width: 18, height: 108)
-        .contentShape(Rectangle())
-        .dropDestination(for: String.self) { values, _ in
-            guard let value = values.first, let assetID = UUID(uuidString: value) else {
-                return false
-            }
-            document.insertAssetOnTimeline(assetID, at: index)
-            return true
-        } isTargeted: {
-            isTargeted = $0
-        }
-        .accessibilityLabel("Insert clip at boundary \(index + 1)")
     }
 }
 

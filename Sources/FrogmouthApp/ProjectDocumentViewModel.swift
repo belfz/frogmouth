@@ -21,6 +21,7 @@ final class ProjectDocumentViewModel: ObservableObject {
     @Published private(set) var importProgress: ImportProgress?
     @Published private(set) var selectedAssetID: MediaAsset.ID?
     @Published private(set) var selectedClipID: TimelineClip.ID?
+    @Published private(set) var playheadFrame: Int64 = 0
     @Published var errorMessage: String?
     @Published var isUnsavedConfirmationPresented = false
 
@@ -216,6 +217,14 @@ final class ProjectDocumentViewModel: ObservableObject {
         guard let clipID,
               let clip = project?.clips.first(where: { $0.id == clipID }) else { return }
         selectedAssetID = clip.assetID
+    }
+
+    func setPlayheadFrame(_ frame: Int64) {
+        guard let project, let index = try? TimelineIndex(project: project) else {
+            playheadFrame = 0
+            return
+        }
+        playheadFrame = min(max(0, frame), index.totalFrames)
     }
 
     func insertAssetOnTimeline(_ assetID: MediaAsset.ID, at index: Int? = nil) {
@@ -451,6 +460,7 @@ final class ProjectDocumentViewModel: ObservableObject {
             hasUnsavedChanges = false
             canUndo = false
             canRedo = false
+            playheadFrame = 0
             return
         }
         project = await session.project
@@ -460,6 +470,11 @@ final class ProjectDocumentViewModel: ObservableObject {
         canUndo = await session.canUndo
         canRedo = await session.canRedo
         reconcileSelection()
+        if let project, let index = try? TimelineIndex(project: project) {
+            playheadFrame = min(max(0, playheadFrame), index.totalFrames)
+        } else {
+            playheadFrame = 0
+        }
     }
 
     private func reconcileSelection() {
