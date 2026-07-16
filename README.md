@@ -8,7 +8,7 @@ frogmouth is a macOS app for quickly stabilizing and trimming videos, then expor
 
 The project was initially designed and developed with Canon EOS R5 footage in mind—primarily 4K H.264 MP4 files with AAC audio. Those videos remain its principal development and testing material, while the application UI is intentionally camera-agnostic. Other formats that FFmpeg can decode are supported on a best-effort basis unless documented otherwise.
 
-The implementation design is in [TECHNICAL_DESIGN.md](TECHNICAL_DESIGN.md). Stabilization latency, benchmarks, alternatives, and optimization decisions are tracked in [STABILIZATION_PERFORMANCE.md](STABILIZATION_PERFORMANCE.md).
+The current implementation design is in [TECHNICAL_DESIGN.md](TECHNICAL_DESIGN.md). The proposed single-track editor is specified in [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md), with an ordered execution backlog in [TIMELINE_IMPLEMENTATION_TASKS.md](TIMELINE_IMPLEMENTATION_TASKS.md). Stabilization latency, benchmarks, alternatives, and optimization decisions are tracked in [STABILIZATION_PERFORMANCE.md](STABILIZATION_PERFORMANCE.md).
 
 ## Development
 
@@ -37,13 +37,18 @@ frogmouth verifies FFmpeg only at startup. When setup is required, install the d
 ## Future development ideas / to do
 
 - H.264 compatibility export for recipients or older hardware/software that cannot reliably decode HEVC; it needs more bitrate for comparable quality.
-- Multiple clips: trim several clips and assemble them into one output.
+- Implement the proposed gapless, single-track multi-clip timeline ([design](TIMELINE_DESIGN.md), [tasks](TIMELINE_IMPLEMENTATION_TASKS.md)).
 - Basic colour controls: exposure, white balance, and contrast while preserving a no-adjustment default.
 - A stabilization-strength slider after preset tuning is validated.
-- Before/after comparison, a thumbnail filmstrip, and finer trim controls.
+- Before/after comparison and finer trim controls.
 - Expose and manage the currently implicit ordered edit-operation stack.
+- Process stabilization as background per-clip jobs while editing continues.
+- Recent Projects, comprehensive timeline keyboard controls, and user-configurable editor layout.
+- A source preview with pre-insert in/out selection, audio waveforms, transitions, and selected-range export.
+- Custom timeline canvas settings, proper SDR/HDR/Log conversion, and broader colour management.
+- Folder-assisted missing-media search and an in-app Relink workflow.
 - Broader, tested format-support tiers beyond Canon-style MP4.
 - A maintained supported-FFmpeg list and smoother update guidance.
 - Reconsider bundled FFmpeg only if convenience outweighs release size, licensing, update, and signing burden.
-- Project persistence, batch/CLI automation, and a macOS sharing workflow.
+- Batch/CLI automation and a macOS sharing workflow.
 - Add code signing and notarization before distributing frogmouth outside a local development build.
