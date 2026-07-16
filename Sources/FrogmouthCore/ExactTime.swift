@@ -92,7 +92,7 @@ public struct MediaTime: Codable, Hashable, Comparable, Sendable {
         try container.encode(timescale, forKey: .timescale)
     }
 
-    fileprivate static func checkedAdd(_ lhs: Int64, _ rhs: Int64) throws -> Int64 {
+    static func checkedAdd(_ lhs: Int64, _ rhs: Int64) throws -> Int64 {
         let result = lhs.addingReportingOverflow(rhs)
         guard !result.overflow else { throw MediaTimeError.arithmeticOverflow }
         return result.partialValue

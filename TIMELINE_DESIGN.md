@@ -127,7 +127,11 @@ struct ProjectState: Codable, Equatable, Sendable {
 
 The first inserted clip establishes `TimelineFormat`. Removing every clip does not silently change it; a future explicit project-settings workflow may do so. Frame rate must be a rational such as `60000/1001`, never a rounded `Double`.
 
+`TimelineIndex` derives each clip's start and duration as integer timeline-frame counts, then exposes rational ranges for downstream builders. Clip positions are never stored. Every `ProjectCommand` edits a candidate value, rebuilds the index, and replaces the current `ProjectState` only after complete validation, so a failed command cannot partially mutate the editor. A silent first clip establishes the default 48 kHz/stereo audio-conformance baseline; an all-silent export still omits audio as specified later.
+
 All structural edits snap to timeline frame boundaries. When a source frame rate differs, one shared conversion policy maps timeline time to the closest valid source/media time using documented `CMTime` rounding. A clip must contain at least one timeline frame. Split is disabled on either edge.
+
+Split takes a frame offset within the selected clip, maps it to the nearest source frame, and verifies that the two independently conformed children contain exactly the requested left/right timeline-frame counts. A boundary that cannot be represented at the source rate is refused rather than moving the cut or changing total duration silently. Both children cover the parent source range exactly and inherit its complete stabilization-pass array.
 
 The implemented rounding policies are explicitly named `towardNegativeInfinity`, `towardPositiveInfinity`, and `nearestTiesAwayFromZero`; timeline duration conformance and ordinary playhead/source mapping use the latter. `HH:MM:SS:FF` uses nominal-rate, non-drop-frame counting, including for 24000/1001, 30000/1001, and 60000/1001. A later drop-frame display, if desired, must be a separate explicit format using a semicolon rather than silently changing persisted timing.
 
@@ -333,7 +337,7 @@ Generate original-source thumbnails lazily with `AVAssetImageGenerator`, keyed b
 
 Continue using value semantics. At the target scale, storing prior `ProjectState` values with Swift copy-on-write is simple and cheap enough, provided generated caches and inspected binary objects are outside the state.
 
-`ProjectHistory` contains session-local `past` and `future` stacks. Each command records one before/after state and invalidates `future` after a divergent edit. A trim drag has a `TrimTransaction` containing its starting state and current transient range; only pointer-up records history. Project selection and playhead movement do not.
+`ProjectHistory` contains session-local undo and redo stacks of copy-on-write `ProjectState` values. Each command records one prior state and invalidates redo after a divergent edit. A trim drag has a `TrimTransaction` containing only its original and current candidate source ranges; the persisted/in-memory project value is unchanged until pointer-up applies one validated trim command. Cancel discards the transaction. Project selection and playhead movement are outside both project state and history.
 
 After a committed command or undo/redo, schedule autosave. A failed autosave leaves the last valid file intact and shows a persistent error; it must not erase in-memory edits.
 

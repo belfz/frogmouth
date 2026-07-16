@@ -126,12 +126,12 @@ Dependencies: T04, T05.
 
 Suggested types: `TimelineIndex`, `ProjectHistory`, `TrimTransaction`, `ProjectCommand` or value-state equivalents.
 
-- [ ] Derive clip timeline starts from ordered durations.
-- [ ] Implement insert/append, split, non-destructive trim, duplicate, reorder, ripple-delete, import, and removal of unused media.
-- [ ] Refuse split at clip edges and removal of referenced media.
-- [ ] Coalesce a complete trim gesture into one history entry.
-- [ ] Keep undo/redo session-local and clear redo after divergent edits.
-- [ ] Derive timeline format from the first inserted clip and retain it if the timeline later becomes empty.
+- [x] Derive clip timeline starts from ordered durations.
+- [x] Implement insert/append, split, non-destructive trim, duplicate, reorder, ripple-delete, import, and removal of unused media.
+- [x] Refuse split at clip edges and removal of referenced media.
+- [x] Coalesce a complete trim gesture into one history entry.
+- [x] Keep undo/redo session-local and clear redo after divergent edits.
+- [x] Derive timeline format from the first inserted clip and retain it if the timeline later becomes empty.
 
 Acceptance:
 
