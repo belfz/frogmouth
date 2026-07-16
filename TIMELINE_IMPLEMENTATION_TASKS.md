@@ -90,11 +90,11 @@ Dependencies: T02.
 
 Suggested types: `MediaTime`, `MediaTimeRange`, `FrameRate`, `TimelineTimeMapper`.
 
-- [ ] Implement normalized rational time values with checked arithmetic.
-- [ ] Bridge to/from `CMTime` without passing through `Double`.
-- [ ] Implement timeline-frame snapping and source-time mapping with explicit rounding.
-- [ ] Implement one-frame minimum validation.
-- [ ] Add formatted `HH:MM:SS:FF` timecode.
+- [x] Implement normalized rational time values with checked arithmetic.
+- [x] Bridge to/from `CMTime` without passing through `Double`.
+- [x] Implement timeline-frame snapping and source-time mapping with explicit rounding.
+- [x] Implement one-frame minimum validation.
+- [x] Add formatted `HH:MM:SS:FF` timecode.
 
 Acceptance:
 
@@ -108,11 +108,11 @@ Dependencies: T03, T04.
 
 Suggested types: `ProjectState`, `TimelineFormat`, `MediaAsset`, `MediaPathReference`, `MediaFingerprint`, `TimelineClip`, `StabilizationEffect`.
 
-- [ ] Implement `Codable`, `Equatable`, `Sendable`, and stable UUID identity.
-- [ ] Define schema version 1 with deterministic fixture JSON.
-- [ ] Keep player objects, URLs to cache files, selection, history, and transient state out of the schema.
-- [ ] Decode unknown fields safely and reject unsupported future schema versions.
-- [ ] Establish a migration protocol even though version 1 has no predecessor.
+- [x] Implement `Codable`, `Equatable`, `Sendable`, and stable UUID identity.
+- [x] Define schema version 1 with deterministic fixture JSON.
+- [x] Keep player objects, URLs to cache files, selection, history, and transient state out of the schema.
+- [x] Decode unknown fields safely and reject unsupported future schema versions.
+- [x] Establish a migration protocol even though version 1 has no predecessor.
 
 Acceptance:
 
@@ -126,12 +126,12 @@ Dependencies: T04, T05.
 
 Suggested types: `TimelineIndex`, `ProjectHistory`, `TrimTransaction`, `ProjectCommand` or value-state equivalents.
 
-- [ ] Derive clip timeline starts from ordered durations.
-- [ ] Implement insert/append, split, non-destructive trim, duplicate, reorder, ripple-delete, import, and removal of unused media.
-- [ ] Refuse split at clip edges and removal of referenced media.
-- [ ] Coalesce a complete trim gesture into one history entry.
-- [ ] Keep undo/redo session-local and clear redo after divergent edits.
-- [ ] Derive timeline format from the first inserted clip and retain it if the timeline later becomes empty.
+- [x] Derive clip timeline starts from ordered durations.
+- [x] Implement insert/append, split, non-destructive trim, duplicate, reorder, ripple-delete, import, and removal of unused media.
+- [x] Refuse split at clip edges and removal of referenced media.
+- [x] Coalesce a complete trim gesture into one history entry.
+- [x] Keep undo/redo session-local and clear redo after divergent edits.
+- [x] Derive timeline format from the first inserted clip and retain it if the timeline later becomes empty.
 
 Acceptance:
 
@@ -146,12 +146,12 @@ Dependencies: T03, T05.
 
 Suggested components: `ProjectMediaResolver`, extended `MediaInspector`, `TimelineCompatibilityValidator`.
 
-- [ ] Resolve relative paths first and absolute fallbacks second.
-- [ ] Validate all Media Library entries on project open.
-- [ ] Aggregate every missing path into one error and leave the project unopened.
-- [ ] Re-inspect changed fingerprints and validate existing clip ranges.
-- [ ] Validate colour compatibility on timeline insertion.
-- [ ] Calculate aspect-fit/pad and frame-rate conformance facts for compatible clips.
+- [x] Resolve relative paths first and absolute fallbacks second.
+- [x] Validate all Media Library entries on project open.
+- [x] Aggregate every missing path into one error and leave the project unopened.
+- [x] Re-inspect changed fingerprints and validate existing clip ranges.
+- [x] Validate colour compatibility on timeline insertion.
+- [x] Calculate aspect-fit/pad and frame-rate conformance facts for compatible clips.
 
 Acceptance:
 
@@ -166,13 +166,13 @@ Dependencies: T05, T06, T07.
 
 Suggested components: `ProjectDocumentStore`, `AutosaveCoordinator`.
 
-- [ ] Create untitled/new, open, first save, save, and save-as operations.
-- [ ] Use a sibling temporary file followed by atomic replacement.
-- [ ] Debounce autosave after committed edits and undo/redo.
-- [ ] Never write transient trim-drag state.
-- [ ] Preserve the last valid file and in-memory state after a failed save.
-- [ ] Prompt on closing an unsaved modified project.
-- [ ] Reset undo/redo on reopen.
+- [x] Create untitled/new, open, first save, save, and save-as operations.
+- [x] Use a sibling temporary file followed by atomic replacement.
+- [x] Debounce autosave after committed edits and undo/redo.
+- [x] Never write transient trim-drag state.
+- [x] Preserve the last valid file and in-memory state after a failed save.
+- [x] Prompt on closing an unsaved modified project.
+- [x] Reset undo/redo on reopen.
 
 Acceptance:
 
@@ -186,11 +186,11 @@ Dependencies: T05, T07.
 
 Suggested components: `ProjectCacheStore`, `CacheManifest`, `CacheKeyBuilder`.
 
-- [ ] Create project/asset-keyed cache directories under the app cache root.
-- [ ] Include source fingerprints and processing revisions in keys.
-- [ ] Support atomic cache writes, cache-hit validation, and stale-reason reporting.
-- [ ] Add **Clear Project Cache** and **Clear All Caches** service operations.
-- [ ] Ensure project loading survives a wholly absent cache.
+- [x] Create project/asset-keyed cache directories under the app cache root.
+- [x] Include source fingerprints and processing revisions in keys.
+- [x] Support atomic cache writes, cache-hit validation, and stale-reason reporting.
+- [x] Add **Clear Project Cache** and **Clear All Caches** service operations.
+- [x] Ensure project loading survives a wholly absent cache.
 
 Acceptance:
 

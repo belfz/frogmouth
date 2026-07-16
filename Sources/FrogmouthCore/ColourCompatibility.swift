@@ -128,7 +128,7 @@ public enum ColourProperty: String, CaseIterable, Equatable, Hashable, Sendable 
     }
 }
 
-public struct VideoColourMetadata: Equatable, Hashable, Sendable {
+public struct VideoColourMetadata: Codable, Equatable, Hashable, Sendable {
     public let primaries: ColourMetadataValue
     public let transferFunction: ColourMetadataValue
     public let matrix: ColourMetadataValue
@@ -159,6 +159,45 @@ public struct VideoColourMetadata: Equatable, Hashable, Sendable {
         case .transferFunction: transferFunction
         case .matrix: matrix
         case .range: range
+        }
+    }
+
+    fileprivate enum CodingKeys: String, CodingKey {
+        case primaries
+        case transfer
+        case matrix
+        case range
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            primaries: try container.decodeIfPresent(String.self, forKey: .primaries),
+            transferFunction: try container.decodeIfPresent(String.self, forKey: .transfer),
+            matrix: try container.decodeIfPresent(String.self, forKey: .matrix),
+            range: try container.decodeIfPresent(String.self, forKey: .range)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeCanonical(primaries, forKey: .primaries)
+        try container.encodeCanonical(transferFunction, forKey: .transfer)
+        try container.encodeCanonical(matrix, forKey: .matrix)
+        try container.encodeCanonical(range, forKey: .range)
+    }
+}
+
+private extension KeyedEncodingContainer where Key == VideoColourMetadata.CodingKeys {
+    mutating func encodeCanonical(
+        _ value: ColourMetadataValue,
+        forKey key: Key
+    ) throws {
+        switch value {
+        case .unspecified:
+            try encodeNil(forKey: key)
+        case let .known(identifier), let .unknown(identifier):
+            try encode(identifier, forKey: key)
         }
     }
 }

@@ -17,6 +17,10 @@ Every video frame contains its zero-based frame number. Audio fixtures use a dis
 
 Generation is deterministic in content, timing, stream layout, and metadata for the approved FFmpeg build. Encoded bytes are not promised to remain identical across FFmpeg or codec-library versions.
 
+## Project schema fixture
+
+`ProjectSchemaV1.frogmouth` is the checked-in canonical, human-readable project JSON fixture. Unlike generated media, it is committed intentionally: deterministic encode/decode tests use it to lock schema version 1 and make future migrations reviewable as ordinary text diffs.
+
 ## Baseline before timeline work
 
 At the start of phase 0 on FFmpeg 7.1.1, frogmouth has 14 passing Swift tests, including the installed-FFmpeg stabilization integration test. The local release app bundle is built with:
@@ -24,4 +28,3 @@ At the start of phase 0 on FFmpeg 7.1.1, frogmouth has 14 passing Swift tests, i
 ```sh
 ./scripts/build-app.sh
 ```
-

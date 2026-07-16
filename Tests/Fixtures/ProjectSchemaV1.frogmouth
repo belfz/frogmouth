@@ -1,0 +1,90 @@
+{
+  "clips" : [
+    {
+      "assetID" : "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+      "id" : "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC",
+      "sourceRange" : {
+        "duration" : {
+          "timescale" : 1,
+          "value" : 10
+        },
+        "start" : {
+          "timescale" : 1,
+          "value" : 0
+        }
+      },
+      "stabilizationPasses" : [
+        {
+          "analysisCoverage" : {
+            "duration" : {
+              "timescale" : 1,
+              "value" : 10
+            },
+            "start" : {
+              "timescale" : 1,
+              "value" : 0
+            }
+          },
+          "id" : "EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE",
+          "mode" : "naturalMotion",
+          "processingRevision" : 1
+        }
+      ]
+    }
+  ],
+  "id" : "11111111-1111-1111-1111-111111111111",
+  "mediaLibrary" : [
+    {
+      "fingerprint" : {
+        "fileSize" : 123456789,
+        "modificationTimeNanoseconds" : 1784023200000000000
+      },
+      "id" : "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+      "inspected" : {
+        "audioChannelCount" : 2,
+        "audioCodec" : "aac",
+        "audioSampleRate" : 48000,
+        "colour" : {
+          "matrix" : "bt709",
+          "primaries" : "bt709",
+          "range" : "full",
+          "transfer" : "bt709"
+        },
+        "duration" : {
+          "timescale" : 200,
+          "value" : 4431
+        },
+        "frameRate" : {
+          "denominator" : 1001,
+          "numerator" : 60000
+        },
+        "height" : 2160,
+        "videoBitrate" : 120000000,
+        "videoCodec" : "avc1",
+        "width" : 4096
+      },
+      "path" : {
+        "absoluteFallback" : "/Volumes/Footage/Media/bird.MP4",
+        "relativeToProject" : "Media/bird.MP4"
+      }
+    }
+  ],
+  "name" : "Wildlife Morning",
+  "schemaVersion" : 1,
+  "timelineFormat" : {
+    "audioChannelCount" : 2,
+    "audioSampleRate" : 48000,
+    "colour" : {
+      "matrix" : "bt709",
+      "primaries" : "bt709",
+      "range" : "full",
+      "transfer" : "bt709"
+    },
+    "frameRate" : {
+      "denominator" : 1001,
+      "numerator" : 60000
+    },
+    "height" : 2160,
+    "width" : 4096
+  }
+}

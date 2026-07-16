@@ -79,6 +79,8 @@ Timeline thumbnails are always sampled from original source media. They do not r
 
 The current `TimeInterval`/`Double` edit model is not precise enough for repeated splits and concatenation. Persist rational media times and convert to `CMTime` at the AVFoundation boundary.
 
+`MediaTime` and `FrameRate` normalize numerator/denominator pairs by their greatest common divisor and reject non-positive scales. Arithmetic uses checked integer operations and reports overflow instead of falling back to floating point. `CMTime` conversion copies integer value/timescale directly and rejects non-numeric values and non-zero epochs.
+
 ```swift
 struct MediaTime: Codable, Hashable, Sendable {
     var value: Int64
@@ -93,9 +95,8 @@ struct MediaTimeRange: Codable, Hashable, Sendable {
 struct TimelineFormat: Codable, Equatable, Sendable {
     var width: Int
     var height: Int
-    var frameRateNumerator: Int
-    var frameRateDenominator: Int
-    var colour: ColourSignature
+    var frameRate: FrameRate
+    var colour: VideoColourMetadata
     var audioSampleRate: Int
     var audioChannelCount: Int
 }
@@ -126,7 +127,13 @@ struct ProjectState: Codable, Equatable, Sendable {
 
 The first inserted clip establishes `TimelineFormat`. Removing every clip does not silently change it; a future explicit project-settings workflow may do so. Frame rate must be a rational such as `60000/1001`, never a rounded `Double`.
 
+`TimelineIndex` derives each clip's start and duration as integer timeline-frame counts, then exposes rational ranges for downstream builders. Clip positions are never stored. Every `ProjectCommand` edits a candidate value, rebuilds the index, and replaces the current `ProjectState` only after complete validation, so a failed command cannot partially mutate the editor. A silent first clip establishes the default 48 kHz/stereo audio-conformance baseline; an all-silent export still omits audio as specified later.
+
 All structural edits snap to timeline frame boundaries. When a source frame rate differs, one shared conversion policy maps timeline time to the closest valid source/media time using documented `CMTime` rounding. A clip must contain at least one timeline frame. Split is disabled on either edge.
+
+Split takes a frame offset within the selected clip, maps it to the nearest source frame, and verifies that the two independently conformed children contain exactly the requested left/right timeline-frame counts. A boundary that cannot be represented at the source rate is refused rather than moving the cut or changing total duration silently. Both children cover the parent source range exactly and inherit its complete stabilization-pass array.
+
+The implemented rounding policies are explicitly named `towardNegativeInfinity`, `towardPositiveInfinity`, and `nearestTiesAwayFromZero`; timeline duration conformance and ordinary playhead/source mapping use the latter. `HH:MM:SS:FF` uses nominal-rate, non-drop-frame counting, including for 24000/1001, 30000/1001, and 60000/1001. A later drop-frame display, if desired, must be a separate explicit format using a semicolon rather than silently changing persisted timing.
 
 The exact source range remains expressed in its native rational time. Its timeline duration is the nearest whole number of timeline frames, so conformance can adjust duration by at most half a timeline frame. AVFoundation scales the inserted composition segment—including linked audio—to that snapped duration. FFmpeg applies the equivalent frame-rate/timestamp normalization and a matching audio tempo adjustment. This avoids fractional final frames and keeps every cut addressable by `HH:MM:SS:FF`.
 
@@ -152,22 +159,31 @@ Illustrative shape:
       },
       "fingerprint": {
         "fileSize": 123456789,
-        "modificationTime": "2026-07-14T10:00:00Z"
+        "modificationTimeNanoseconds": 1784023200000000000
       },
       "inspected": {
-        "duration": { "value": 22155, "timescale": 1000 },
+        "duration": { "value": 4431, "timescale": 200 },
         "width": 4096,
         "height": 2160,
-        "frameRateNumerator": 60000,
-        "frameRateDenominator": 1001
+        "frameRate": { "numerator": 60000, "denominator": 1001 },
+        "videoBitrate": 120000000,
+        "videoCodec": "avc1",
+        "audioCodec": "aac",
+        "audioSampleRate": 48000,
+        "audioChannelCount": 2,
+        "colour": {
+          "primaries": "bt709",
+          "transfer": "bt709",
+          "matrix": "bt709",
+          "range": "full"
+        }
       }
     }
   ],
   "timelineFormat": {
     "width": 4096,
     "height": 2160,
-    "frameRateNumerator": 60000,
-    "frameRateDenominator": 1001,
+    "frameRate": { "numerator": 60000, "denominator": 1001 },
     "colour": {
       "primaries": "bt709",
       "transfer": "bt709",
@@ -182,8 +198,8 @@ Illustrative shape:
       "id": "A-CLIP-UUID",
       "assetID": "AN-ASSET-UUID",
       "sourceRange": {
-        "start": { "value": 0, "timescale": 60000 },
-        "duration": { "value": 600000, "timescale": 60000 }
+        "start": { "value": 0, "timescale": 1 },
+        "duration": { "value": 10, "timescale": 1 }
       },
       "stabilizationPasses": []
     }
@@ -191,13 +207,17 @@ Illustrative shape:
 }
 ```
 
-The exact schema must be fixture-tested before release. Unknown future fields should be ignored where safe; a newer unsupported `schemaVersion` must produce an actionable error rather than a partial load. Each schema change requires an explicit migration and before/after fixture.
+Schema version 1 is locked by the human-readable [`ProjectSchemaV1.frogmouth`](Tests/Fixtures/ProjectSchemaV1.frogmouth) fixture and deterministic round-trip tests. Unknown future fields are ignored where safe; a newer unsupported `schemaVersion` produces an actionable error before partial decoding. `ProjectMigration` and `ProjectMigrationPipeline` define the required sequential migration boundary even though version 1 has no predecessor. Each future schema change requires an explicit migration and before/after fixture.
 
 ### Paths and missing sources
 
 Store a path relative to the project when practical, plus an absolute fallback and inexpensive identity facts. On open, resolve and validate every Media Library entry. If any file is absent, keep the project unopened and show one error listing every missing path. The user restores the files externally and retries. There is no offline placeholder or Relink UI initially.
 
+`ProjectMediaResolver` always tries the project-relative candidate first and the absolute fallback second. `MediaFingerprint` is the regular file's exact byte size plus its POSIX modification timestamp in nanoseconds. This is deliberately inexpensive identity detection, not a content hash.
+
 If a file exists but its fingerprint changed, re-inspect it. Accept it only if existing clip ranges and compatibility constraints remain valid; otherwise report the conflict without modifying the project.
+
+`ProjectOpenValidator` performs resolution, fingerprinting, changed-file inspection, range checks, and timeline-colour checks against a candidate `ProjectState`; it returns the candidate and runtime resolved-URL map only after every check succeeds. Missing sources are aggregated before inspection. Changed-source errors name the full resolved path and affected clip IDs, and the caller's decoded state remains untouched so retrying after an external fix is safe.
 
 ### Save behavior
 
@@ -211,6 +231,12 @@ If a file exists but its fingerprint changed, re-inspect it. Accept it only if e
 - Undo/redo history resets when a project is reopened.
 - Only one project window is supported initially.
 
+`ProjectDocumentSession` is the document-lifecycle boundary used by the later UI phase. It owns the value-state editor, the last successfully saved snapshot, the current document URL, resolved runtime media URLs, and a persistent save error. New documents have no URL; plain Save therefore requests a first-save location, while Save As assigns a new project UUID and consistently rewrites the session-local history to that identity. Opening constructs a fresh editor from the fully validated project, so undo and redo never cross sessions.
+
+All manual and automatic writes pass through one actor-isolated `ProjectDocumentStore`. `AtomicProjectFileWriter` creates a hidden sibling temporary file, writes and `fsync`s its complete bytes, closes it, atomically renames it over the destination, and then best-effort `fsync`s the parent directory. A failed write does not advance the saved snapshot or discard the in-memory project. The UI can use `needsCloseConfirmation` whenever the current value differs from the last successful snapshot and display `lastSaveError` until a later save succeeds.
+
+`ProjectAutosaveCoordinator` snapshots only committed project values and debounces them for 750 ms. A newer snapshot cancels an older pending debounce; the document store serializes any write already underway, ensuring the newest scheduled value is written last. Starting a manual Save or Save As cancels pending autosave first. Trim-pointer updates live solely in `TrimTransaction`, so no autosave is scheduled until pointer-up commits the one trim command; undo and redo schedule autosave like any other committed edit.
+
 ## 5. Media compatibility and conformance
 
 The first timeline clip establishes the output canvas, frame rate, colour signature, and baseline audio format.
@@ -223,6 +249,8 @@ For compatible colour sources with different dimensions, aspect ratios, or frame
 - Convert to the timeline frame rate.
 - Normalize sample aspect ratio and timestamps.
 - Resample audio and conform channel layout for concatenation.
+
+`TimelineCompatibilityValidator` calculates the aspect-fit dimensions with checked integer arithmetic and nearest-pixel rounding, then divides odd padding with the extra pixel on the right or bottom. Its conformance facts separately report frame-rate conversion, audio resampling, and channel-layout conversion. AVFoundation inspection persists rational frame rate from the track's exact minimum frame duration; common-rate matching is only a fallback when the framework does not provide a usable duration.
 
 ### Known colour-management trade-off
 
@@ -272,13 +300,16 @@ Use an app-managed persistent-but-disposable directory such as:
 
 ```text
 ~/Library/Caches/dev.frogmouth.app/projects/<project UUID>/
-  thumbnails/<asset fingerprint>/<request key>.jpg
-  stabilization/<cache key>/pass-<pass UUID>.trf
-  stabilization/<cache key>/preview.mp4
-  manifests/<cache key>.json
+  assets/<asset UUID>/entries/<SHA-256 cache key>/
+    artifact-<generation UUID>.<extension>
+    manifest.json
 ```
 
-A stabilization cache key includes the asset fingerprint, analyzed source range, ordered preceding pass configuration, current pass profile, frogmouth processing revision, FFmpeg/libvidstab version, and proxy settings. Cache deletion never corrupts a project; it changes configured stabilization to stale. Provide **Clear Project Cache** and **Clear All Caches**.
+Every entry identity contains a namespace and logical artifact ID, the asset UUID and source fingerprint, the frogmouth processing revision, an optional tool revision, and ordered request parameters. `CacheKeyBuilder` deterministically encodes that identity and names the entry with its SHA-256 digest. For stabilization, the ordered parameters must include the analyzed source range, preceding pass configuration, current pass profile, and proxy settings, while the tool revision identifies the FFmpeg/libvidstab combination. A different source fingerprint, processing/tool revision, or ordered configuration therefore cannot address the old entry.
+
+`ProjectCacheStore` atomically writes a uniquely named artifact and then atomically replaces `manifest.json`; the manifest is the commit point. Until it succeeds, a lookup can only observe the previous committed artifact or a miss. Hits validate manifest version, full identity, key, safe relative filename, artifact existence, and byte count. If the exact key is absent, manifests for the same asset/namespace/logical artifact are inspected to report which identity fields changed. Malformed, missing, or incompatible data is disposable stale state, not a project-open failure.
+
+**Clear Project Cache** removes only `projects/<project UUID>` beneath the fixed app cache root. **Clear All Caches** removes only that root's `projects` child. Neither operation consumes a source or document path, and cache URLs never enter project JSON. Cache deletion never corrupts a project; it changes configured stabilization to stale.
 
 ### Transform alignment after split — validated decision
 
@@ -321,9 +352,11 @@ Generate original-source thumbnails lazily with `AVAssetImageGenerator`, keyed b
 
 Continue using value semantics. At the target scale, storing prior `ProjectState` values with Swift copy-on-write is simple and cheap enough, provided generated caches and inspected binary objects are outside the state.
 
-`ProjectHistory` contains session-local `past` and `future` stacks. Each command records one before/after state and invalidates `future` after a divergent edit. A trim drag has a `TrimTransaction` containing its starting state and current transient range; only pointer-up records history. Project selection and playhead movement do not.
+`ProjectHistory` contains session-local undo and redo stacks of copy-on-write `ProjectState` values. Each command records one prior state and invalidates redo after a divergent edit. A trim drag has a `TrimTransaction` containing only its original and current candidate source ranges; the persisted/in-memory project value is unchanged until pointer-up applies one validated trim command. Cancel discards the transaction. Project selection and playhead movement are outside both project state and history.
 
 After a committed command or undo/redo, schedule autosave. A failed autosave leaves the last valid file intact and shows a persistent error; it must not erase in-memory edits.
+
+Persistence tests exercise initial save, replacement, Save As identity, close state, injected write failure, rapid debounce, undo/redo autosave, transient versus committed trim, and reopen behavior. The final `.frogmouth` path always decodes as either the previous or new complete state—never a partially written JSON document.
 
 ## 9. FFmpeg timeline export
 

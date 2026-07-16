@@ -25,7 +25,13 @@ public struct MediaInspector: MediaInspecting {
             let naturalSize = try await videoTrack.load(.naturalSize)
             let transform = try await videoTrack.load(.preferredTransform)
             let displayedSize = naturalSize.applying(transform)
-            let frameRate = Double(try await videoTrack.load(.nominalFrameRate))
+            let nominalFrameRate = try await videoTrack.load(.nominalFrameRate)
+            let minimumFrameDuration = try await videoTrack.load(.minFrameDuration)
+            let exactFrameRate = try Self.exactFrameRate(
+                minimumFrameDuration: minimumFrameDuration,
+                nominalFrameRate: nominalFrameRate
+            )
+            let frameRate = Double(exactFrameRate.numerator) / Double(exactFrameRate.denominator)
             let videoBitrate = Double(try await videoTrack.load(.estimatedDataRate))
             let videoFormats = try await videoTrack.load(.formatDescriptions)
             let videoCodec = Self.fourCC(videoFormats.first.map(CMFormatDescriptionGetMediaSubType) ?? 0)
@@ -60,9 +66,11 @@ public struct MediaInspector: MediaInspecting {
             return MediaInfo(
                 url: url,
                 duration: CMTimeGetSeconds(duration),
+                exactDuration: try MediaTime(cmTime: duration),
                 width: Int(abs(displayedSize.width.rounded())),
                 height: Int(abs(displayedSize.height.rounded())),
                 frameRate: frameRate,
+                exactFrameRate: exactFrameRate,
                 videoBitrate: videoBitrate,
                 videoCodec: videoCodec,
                 audioCodec: audioCodec,
@@ -87,6 +95,37 @@ public struct MediaInspector: MediaInspecting {
             UInt8(value & 0xff),
         ]
         return String(bytes: bytes, encoding: .ascii)?.trimmingCharacters(in: .whitespaces) ?? "unknown"
+    }
+
+    private static func exactFrameRate(
+        minimumFrameDuration: CMTime,
+        nominalFrameRate: Float
+    ) throws -> FrameRate {
+        if minimumFrameDuration.isNumeric,
+           minimumFrameDuration.value > 0 {
+            let duration = try MediaTime(cmTime: minimumFrameDuration)
+            if duration.value <= Int64(Int32.max) {
+                return try FrameRate(
+                    numerator: duration.timescale,
+                    denominator: Int32(duration.value)
+                )
+            }
+        }
+
+        let nominal = Double(nominalFrameRate)
+        let commonRates: [(Int32, Int32)] = [
+            (24, 1), (25, 1), (30, 1), (50, 1), (60, 1),
+            (24_000, 1_001), (30_000, 1_001), (60_000, 1_001),
+        ]
+        if let matched = commonRates.min(by: {
+            abs(Double($0.0) / Double($0.1) - nominal)
+                < abs(Double($1.0) / Double($1.1) - nominal)
+        }), abs(Double(matched.0) / Double(matched.1) - nominal) < 0.01 {
+            return try FrameRate(numerator: matched.0, denominator: matched.1)
+        }
+        throw FrogmouthError.unsupportedMedia(
+            "The video frame rate could not be represented exactly."
+        )
     }
 
     private static func colourMetadata(
