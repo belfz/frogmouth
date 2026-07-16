@@ -17,7 +17,7 @@ struct ProjectEditorShell: View {
                         .frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
                 }
 
-                TimelineViewerPlaceholder(project: project)
+                TimelinePlayerView(document: document, project: project)
                     .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
 
                 if showsInspector {
@@ -232,26 +232,112 @@ private struct MediaLibraryRow: View {
     }
 }
 
-private struct TimelineViewerPlaceholder: View {
+private struct TimelinePlayerView: View {
+    @ObservedObject var document: ProjectDocumentViewModel
+    @ObservedObject var playback: PlaybackCoordinator
     let project: ProjectState
 
+    init(document: ProjectDocumentViewModel, project: ProjectState) {
+        self.document = document
+        playback = document.playback
+        self.project = project
+    }
+
     var body: some View {
-        ZStack {
-            Color.black
-            VStack(spacing: 12) {
-                Image(systemName: project.clips.isEmpty ? "rectangle.stack.badge.plus" : "play.rectangle")
-                    .font(.system(size: 42))
-                Text(project.clips.isEmpty ? "Build the timeline" : "Timeline Viewer")
-                    .font(.title2.bold())
-                Text(project.clips.isEmpty
-                     ? "Append or drag a source from the Media Library."
-                     : "\(project.clips.count) gapless clip\(project.clips.count == 1 ? "" : "s") ready for timeline playback.")
-                    .font(.callout)
+        VStack(spacing: 0) {
+            ZStack {
+                NativeVideoPlayer(player: playback.player, controlsStyle: .none)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if project.clips.isEmpty {
+                    viewerMessage(
+                        icon: "rectangle.stack.badge.plus",
+                        title: "Build the timeline",
+                        detail: "Append or drag a source from the Media Library."
+                    )
+                } else if playback.isBuilding {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Building timeline preview…")
+                            .font(.headline)
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(20)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                } else if let error = playback.errorMessage {
+                    viewerMessage(
+                        icon: "exclamationmark.triangle",
+                        title: "Timeline preview unavailable",
+                        detail: error
+                    )
+                }
             }
-            .foregroundStyle(.secondary)
+
+            playbackControls
         }
-        .accessibilityElement(children: .combine)
+        .background(Color.black)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Timeline viewer")
+    }
+
+    @ViewBuilder
+    private func viewerMessage(icon: String, title: String, detail: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 42))
+            Text(title)
+                .font(.title2.bold())
+            Text(detail)
+                .font(.callout)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 460)
+        }
+        .foregroundStyle(.secondary)
+        .padding(24)
+    }
+
+    private var playbackControls: some View {
+        HStack(spacing: 12) {
+            Button(action: playback.togglePlayback) {
+                Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
+                    .frame(width: 18)
+            }
+            .buttonStyle(.borderless)
+            .keyboardShortcut(.space, modifiers: [])
+            .disabled(project.clips.isEmpty || playback.isBuilding || playback.errorMessage != nil)
+            .help(playback.isPlaying ? "Pause" : "Play")
+
+            Text(playheadTimecode)
+                .font(.caption.monospacedDigit())
+            Text("/")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            Text(durationTimecode)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Spacer()
+
+            if let location = playback.location,
+               let clipNumber = project.clips.firstIndex(where: { $0.id == location.clipID }) {
+                Text("Clip \(clipNumber + 1)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 38)
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.96))
+    }
+
+    private var playheadTimecode: String {
+        guard let rate = project.timelineFormat?.frameRate else { return "00:00:00:00" }
+        return (try? rate.timecode(forFrame: document.playheadFrame)) ?? "00:00:00:00"
+    }
+
+    private var durationTimecode: String {
+        guard let rate = project.timelineFormat?.frameRate,
+              let index = try? TimelineIndex(project: project) else { return "00:00:00:00" }
+        return (try? rate.timecode(forFrame: index.totalFrames)) ?? "00:00:00:00"
     }
 }
 
@@ -301,6 +387,19 @@ private struct ProjectInspectorView: View {
         }
         InspectorValue(label: "Start", value: formatDuration(clip.sourceRange.start))
         InspectorValue(label: "Duration", value: formatDuration(clip.sourceRange.duration))
+        if let location = document.playbackLocation,
+           location.clipID == clip.id,
+           let asset = project.mediaLibrary.first(where: { $0.id == clip.assetID }) {
+            InspectorValue(
+                label: "Playhead in clip",
+                value: "+\(location.clipFrameOffset) timeline frames"
+            )
+            InspectorValue(
+                label: "Source timecode",
+                value: (try? asset.inspected.frameRate.timecode(for: location.sourceTime))
+                    ?? formatDuration(location.sourceTime)
+            )
+        }
         InspectorValue(label: "Stabilization passes", value: "\(clip.stabilizationPasses.count)")
         Text("Audio remains linked to this clip.")
             .font(.caption)

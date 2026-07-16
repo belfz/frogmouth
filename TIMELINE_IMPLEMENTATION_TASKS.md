@@ -296,13 +296,13 @@ Dependencies: T02, T06, T07, T14.
 
 Suggested components: `PlaybackCompositionBuilder`, `PlaybackCoordinator`.
 
-- [ ] Assemble ordered source ranges into an `AVMutableComposition`.
-- [ ] Apply aspect-fit/pad and timeline frame duration with `AVMutableVideoComposition`.
-- [ ] Preserve linked audio and hard cuts.
-- [ ] Rebuild off the main actor and install player items on `@MainActor`.
-- [ ] Retain playhead position where possible after edits.
-- [ ] Map player time back to selected clip/source time exactly.
-- [ ] Add valid stabilized-proxy substitution after T17 without changing public composition semantics.
+- [x] Assemble ordered source ranges into an `AVMutableComposition`.
+- [x] Apply aspect-fit/pad and timeline frame duration with `AVMutableVideoComposition`.
+- [x] Preserve linked audio and hard cuts.
+- [x] Rebuild off the main actor and install player items on `@MainActor`.
+- [x] Retain playhead position where possible after edits.
+- [x] Map player time back to selected clip/source time exactly.
+- [x] Preserve a public source-override seam so T17 can substitute valid stabilized proxies without changing composition semantics.
 
 Acceptance:
 

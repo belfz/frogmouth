@@ -30,6 +30,7 @@ final class ProjectDocumentViewModel: ObservableObject {
     @Published private(set) var selectedAssetID: MediaAsset.ID?
     @Published private(set) var selectedClipID: TimelineClip.ID?
     @Published private(set) var playheadFrame: Int64 = 0
+    @Published private(set) var playbackLocation: PlaybackLocation?
     @Published private(set) var trimPreview: TrimPreview?
     @Published var errorMessage: String?
     @Published var isUnsavedConfirmationPresented = false
@@ -45,6 +46,7 @@ final class ProjectDocumentViewModel: ObservableObject {
     private let factsInspector: any ProjectMediaFactsInspecting
     private let fingerprinter: any MediaFingerprinting
     let thumbnailService: ThumbnailService
+    let playback: PlaybackCoordinator
     private var session: ProjectDocumentSession?
     private var pendingTransition: PendingTransition?
     private var autosaveStatusTask: Task<Void, Never>?
@@ -54,12 +56,18 @@ final class ProjectDocumentViewModel: ObservableObject {
         store: ProjectDocumentStore = ProjectDocumentStore(),
         factsInspector: any ProjectMediaFactsInspecting = AVProjectMediaFactsInspector(),
         fingerprinter: any MediaFingerprinting = MediaFingerprinter(),
-        thumbnailService: ThumbnailService = ThumbnailService()
+        thumbnailService: ThumbnailService = ThumbnailService(),
+        playback: PlaybackCoordinator = PlaybackCoordinator()
     ) {
         self.store = store
         self.factsInspector = factsInspector
         self.fingerprinter = fingerprinter
         self.thumbnailService = thumbnailService
+        self.playback = playback
+        playback.playheadDidChange = { [weak self] frame, location in
+            self?.playheadFrame = frame
+            self?.playbackLocation = location
+        }
     }
 
     var hasProject: Bool { project != nil }
@@ -261,9 +269,12 @@ final class ProjectDocumentViewModel: ObservableObject {
     func setPlayheadFrame(_ frame: Int64) {
         guard let project, let index = try? TimelineIndex(project: project) else {
             playheadFrame = 0
+            playback.seek(toFrame: 0)
             return
         }
-        playheadFrame = min(max(0, frame), index.totalFrames)
+        let clamped = min(max(0, frame), index.totalFrames)
+        playheadFrame = clamped
+        playback.seek(toFrame: clamped)
     }
 
     func updateTrimPreview(
@@ -375,7 +386,7 @@ final class ProjectDocumentViewModel: ObservableObject {
             guard let updated = self.project else { return }
             if updated.clips.isEmpty {
                 self.selectedClipID = nil
-                self.playheadFrame = 0
+                self.setPlayheadFrame(0)
             } else {
                 let nextIndex = min(deletedIndex, updated.clips.count - 1)
                 self.selectClip(updated.clips[nextIndex].id)
@@ -439,6 +450,7 @@ final class ProjectDocumentViewModel: ObservableObject {
 
     func shutdown() {
         autosaveStatusTask?.cancel()
+        playback.shutdown()
     }
 
     private func request(_ transition: PendingTransition) {
@@ -593,7 +605,7 @@ final class ProjectDocumentViewModel: ObservableObject {
               let selectedClipID,
               let index = try? TimelineIndex(project: project),
               let entry = index.entry(for: selectedClipID) else { return }
-        playheadFrame = entry.startFrame
+        setPlayheadFrame(entry.startFrame)
     }
 
     @discardableResult
@@ -643,6 +655,8 @@ final class ProjectDocumentViewModel: ObservableObject {
     }
 
     private func refreshPublishedState() async {
+        let previousProject = project
+        let previousMediaURLs = resolvedMediaURLs
         guard let session else {
             project = nil
             fileURL = nil
@@ -651,6 +665,8 @@ final class ProjectDocumentViewModel: ObservableObject {
             canUndo = false
             canRedo = false
             playheadFrame = 0
+            playbackLocation = nil
+            playback.rebuild(project: nil, mediaURLs: [:], preservingFrame: 0)
             return
         }
         project = await session.project
@@ -664,6 +680,13 @@ final class ProjectDocumentViewModel: ObservableObject {
             playheadFrame = min(max(0, playheadFrame), index.totalFrames)
         } else {
             playheadFrame = 0
+        }
+        if project != previousProject || resolvedMediaURLs != previousMediaURLs {
+            playback.rebuild(
+                project: project,
+                mediaURLs: resolvedMediaURLs,
+                preservingFrame: playheadFrame
+            )
         }
     }
 
