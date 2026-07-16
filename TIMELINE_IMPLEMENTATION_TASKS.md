@@ -108,11 +108,11 @@ Dependencies: T03, T04.
 
 Suggested types: `ProjectState`, `TimelineFormat`, `MediaAsset`, `MediaPathReference`, `MediaFingerprint`, `TimelineClip`, `StabilizationEffect`.
 
-- [ ] Implement `Codable`, `Equatable`, `Sendable`, and stable UUID identity.
-- [ ] Define schema version 1 with deterministic fixture JSON.
-- [ ] Keep player objects, URLs to cache files, selection, history, and transient state out of the schema.
-- [ ] Decode unknown fields safely and reject unsupported future schema versions.
-- [ ] Establish a migration protocol even though version 1 has no predecessor.
+- [x] Implement `Codable`, `Equatable`, `Sendable`, and stable UUID identity.
+- [x] Define schema version 1 with deterministic fixture JSON.
+- [x] Keep player objects, URLs to cache files, selection, history, and transient state out of the schema.
+- [x] Decode unknown fields safely and reject unsupported future schema versions.
+- [x] Establish a migration protocol even though version 1 has no predecessor.
 
 Acceptance:
 

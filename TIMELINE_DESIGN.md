@@ -95,9 +95,8 @@ struct MediaTimeRange: Codable, Hashable, Sendable {
 struct TimelineFormat: Codable, Equatable, Sendable {
     var width: Int
     var height: Int
-    var frameRateNumerator: Int
-    var frameRateDenominator: Int
-    var colour: ColourSignature
+    var frameRate: FrameRate
+    var colour: VideoColourMetadata
     var audioSampleRate: Int
     var audioChannelCount: Int
 }
@@ -156,22 +155,31 @@ Illustrative shape:
       },
       "fingerprint": {
         "fileSize": 123456789,
-        "modificationTime": "2026-07-14T10:00:00Z"
+        "modificationTimeNanoseconds": 1784023200000000000
       },
       "inspected": {
-        "duration": { "value": 22155, "timescale": 1000 },
+        "duration": { "value": 4431, "timescale": 200 },
         "width": 4096,
         "height": 2160,
-        "frameRateNumerator": 60000,
-        "frameRateDenominator": 1001
+        "frameRate": { "numerator": 60000, "denominator": 1001 },
+        "videoBitrate": 120000000,
+        "videoCodec": "avc1",
+        "audioCodec": "aac",
+        "audioSampleRate": 48000,
+        "audioChannelCount": 2,
+        "colour": {
+          "primaries": "bt709",
+          "transfer": "bt709",
+          "matrix": "bt709",
+          "range": "full"
+        }
       }
     }
   ],
   "timelineFormat": {
     "width": 4096,
     "height": 2160,
-    "frameRateNumerator": 60000,
-    "frameRateDenominator": 1001,
+    "frameRate": { "numerator": 60000, "denominator": 1001 },
     "colour": {
       "primaries": "bt709",
       "transfer": "bt709",
@@ -186,8 +194,8 @@ Illustrative shape:
       "id": "A-CLIP-UUID",
       "assetID": "AN-ASSET-UUID",
       "sourceRange": {
-        "start": { "value": 0, "timescale": 60000 },
-        "duration": { "value": 600000, "timescale": 60000 }
+        "start": { "value": 0, "timescale": 1 },
+        "duration": { "value": 10, "timescale": 1 }
       },
       "stabilizationPasses": []
     }
@@ -195,7 +203,7 @@ Illustrative shape:
 }
 ```
 
-The exact schema must be fixture-tested before release. Unknown future fields should be ignored where safe; a newer unsupported `schemaVersion` must produce an actionable error rather than a partial load. Each schema change requires an explicit migration and before/after fixture.
+Schema version 1 is locked by the human-readable [`ProjectSchemaV1.frogmouth`](Tests/Fixtures/ProjectSchemaV1.frogmouth) fixture and deterministic round-trip tests. Unknown future fields are ignored where safe; a newer unsupported `schemaVersion` produces an actionable error before partial decoding. `ProjectMigration` and `ProjectMigrationPipeline` define the required sequential migration boundary even though version 1 has no predecessor. Each future schema change requires an explicit migration and before/after fixture.
 
 ### Paths and missing sources
 

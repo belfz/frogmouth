@@ -65,7 +65,7 @@ public struct TrimRange: Equatable, Sendable {
     }
 }
 
-public enum StabilizationMode: String, CaseIterable, Identifiable, Sendable {
+public enum StabilizationMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case none
     case steady
     case naturalMotion
