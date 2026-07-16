@@ -183,6 +183,8 @@ private struct TimelineTrackContent: View {
     let viewportWidth: Double
     let contentWidth: Double
 
+    @State private var isTrackDropTargeted = false
+
     private let math = TimelineViewportMath()
     private let rulerHeight = 28.0
     private let clipHeight = 80.0
@@ -248,10 +250,23 @@ private struct TimelineTrackContent: View {
         }
         .frame(width: contentWidth, height: rulerHeight + clipHeight + 4)
         .contentShape(Rectangle())
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(
+                    isTrackDropTargeted ? Color.accentColor : .clear,
+                    lineWidth: 2
+                )
+                .allowsHitTesting(false)
+        }
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in scrub(atX: value.location.x) }
         )
+        .dropDestination(for: String.self) { values, location in
+            handleDrop(values, atX: location.x)
+        } isTargeted: {
+            isTrackDropTargeted = $0
+        }
     }
 
     @ViewBuilder
@@ -283,6 +298,27 @@ private struct TimelineTrackContent: View {
         guard let timelineIndex else { return 0 }
         return timelineIndex.entries.firstIndex(where: { $0.startFrame == frame })
             ?? timelineIndex.entries.count
+    }
+
+    private func nearestInsertionIndex(atX locationX: Double) -> Int {
+        boundaryFrames.enumerated().min { lhs, rhs in
+            abs(x(forFrame: lhs.element) - locationX)
+                < abs(x(forFrame: rhs.element) - locationX)
+        }?.offset ?? 0
+    }
+
+    private func handleDrop(_ values: [String], atX locationX: Double) -> Bool {
+        guard let payload = values.compactMap(TimelineDragPayload.init).first else {
+            return false
+        }
+        let insertionIndex = nearestInsertionIndex(atX: locationX)
+        switch payload {
+        case let .asset(assetID):
+            document.insertAssetOnTimeline(assetID, at: insertionIndex)
+        case let .clip(clipID):
+            document.moveClip(clipID, toBoundaryIndex: insertionIndex)
+        }
+        return true
     }
 
     private func x(forFrame frame: Int64) -> Double {
@@ -553,22 +589,37 @@ private struct TimelineDropBoundary: View {
         .frame(width: 18, height: 84)
         .contentShape(Rectangle())
         .dropDestination(for: String.self) { values, _ in
-            guard let value = values.first else { return false }
-            if value.hasPrefix("asset:"),
-               let assetID = UUID(uuidString: String(value.dropFirst("asset:".count))) {
+            guard let payload = values.compactMap(TimelineDragPayload.init).first else {
+                return false
+            }
+            switch payload {
+            case let .asset(assetID):
                 document.insertAssetOnTimeline(assetID, at: insertionIndex)
-                return true
-            }
-            if value.hasPrefix("clip:"),
-               let clipID = UUID(uuidString: String(value.dropFirst("clip:".count))) {
+            case let .clip(clipID):
                 document.moveClip(clipID, toBoundaryIndex: insertionIndex)
-                return true
             }
-            return false
+            return true
         } isTargeted: {
             isTargeted = $0
         }
         .accessibilityLabel("Insert clip at boundary \(insertionIndex + 1)")
+    }
+}
+
+private enum TimelineDragPayload: Equatable {
+    case asset(MediaAsset.ID)
+    case clip(TimelineClip.ID)
+
+    init?(_ value: String) {
+        if value.hasPrefix("asset:"),
+           let id = UUID(uuidString: String(value.dropFirst("asset:".count))) {
+            self = .asset(id)
+        } else if value.hasPrefix("clip:"),
+                  let id = UUID(uuidString: String(value.dropFirst("clip:".count))) {
+            self = .clip(id)
+        } else {
+            return nil
+        }
     }
 }
 
