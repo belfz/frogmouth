@@ -186,11 +186,11 @@ Dependencies: T05, T07.
 
 Suggested components: `ProjectCacheStore`, `CacheManifest`, `CacheKeyBuilder`.
 
-- [ ] Create project/asset-keyed cache directories under the app cache root.
-- [ ] Include source fingerprints and processing revisions in keys.
-- [ ] Support atomic cache writes, cache-hit validation, and stale-reason reporting.
-- [ ] Add **Clear Project Cache** and **Clear All Caches** service operations.
-- [ ] Ensure project loading survives a wholly absent cache.
+- [x] Create project/asset-keyed cache directories under the app cache root.
+- [x] Include source fingerprints and processing revisions in keys.
+- [x] Support atomic cache writes, cache-hit validation, and stale-reason reporting.
+- [x] Add **Clear Project Cache** and **Clear All Caches** service operations.
+- [x] Ensure project loading survives a wholly absent cache.
 
 Acceptance:
 

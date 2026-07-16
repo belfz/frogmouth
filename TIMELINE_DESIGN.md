@@ -300,13 +300,16 @@ Use an app-managed persistent-but-disposable directory such as:
 
 ```text
 ~/Library/Caches/dev.frogmouth.app/projects/<project UUID>/
-  thumbnails/<asset fingerprint>/<request key>.jpg
-  stabilization/<cache key>/pass-<pass UUID>.trf
-  stabilization/<cache key>/preview.mp4
-  manifests/<cache key>.json
+  assets/<asset UUID>/entries/<SHA-256 cache key>/
+    artifact-<generation UUID>.<extension>
+    manifest.json
 ```
 
-A stabilization cache key includes the asset fingerprint, analyzed source range, ordered preceding pass configuration, current pass profile, frogmouth processing revision, FFmpeg/libvidstab version, and proxy settings. Cache deletion never corrupts a project; it changes configured stabilization to stale. Provide **Clear Project Cache** and **Clear All Caches**.
+Every entry identity contains a namespace and logical artifact ID, the asset UUID and source fingerprint, the frogmouth processing revision, an optional tool revision, and ordered request parameters. `CacheKeyBuilder` deterministically encodes that identity and names the entry with its SHA-256 digest. For stabilization, the ordered parameters must include the analyzed source range, preceding pass configuration, current pass profile, and proxy settings, while the tool revision identifies the FFmpeg/libvidstab combination. A different source fingerprint, processing/tool revision, or ordered configuration therefore cannot address the old entry.
+
+`ProjectCacheStore` atomically writes a uniquely named artifact and then atomically replaces `manifest.json`; the manifest is the commit point. Until it succeeds, a lookup can only observe the previous committed artifact or a miss. Hits validate manifest version, full identity, key, safe relative filename, artifact existence, and byte count. If the exact key is absent, manifests for the same asset/namespace/logical artifact are inspected to report which identity fields changed. Malformed, missing, or incompatible data is disposable stale state, not a project-open failure.
+
+**Clear Project Cache** removes only `projects/<project UUID>` beneath the fixed app cache root. **Clear All Caches** removes only that root's `projects` child. Neither operation consumes a source or document path, and cache URLs never enter project JSON. Cache deletion never corrupts a project; it changes configured stabilization to stale.
 
 ### Transform alignment after split — validated decision
 
