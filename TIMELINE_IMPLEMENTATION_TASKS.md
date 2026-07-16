@@ -54,12 +54,12 @@ Acceptance:
 
 Dependencies: T00.
 
-- [ ] Build a throwaway `AVMutableComposition` from several exact fixture ranges.
-- [ ] Build the equivalent FFmpeg hard-cut output.
-- [ ] Cover repeated ranges from one asset and ranges from several assets.
-- [ ] Conform compatible resolution/aspect-ratio/frame-rate differences to the first clip's format.
-- [ ] Compare total duration, boundary frames, playhead mapping, and audio timing.
-- [ ] Verify centre-padding and rational 60000/1001 output behavior.
+- [x] Build a throwaway `AVMutableComposition` from several exact fixture ranges.
+- [x] Build the equivalent FFmpeg hard-cut output.
+- [x] Cover repeated ranges from one asset and ranges from several assets.
+- [x] Conform compatible resolution/aspect-ratio/frame-rate differences to the first clip's format.
+- [x] Compare total duration, boundary frames, playhead mapping, and audio timing.
+- [x] Verify centre-padding and rational 60000/1001 output behavior.
 
 Acceptance:
 

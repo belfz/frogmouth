@@ -128,6 +128,8 @@ The first inserted clip establishes `TimelineFormat`. Removing every clip does n
 
 All structural edits snap to timeline frame boundaries. When a source frame rate differs, one shared conversion policy maps timeline time to the closest valid source/media time using documented `CMTime` rounding. A clip must contain at least one timeline frame. Split is disabled on either edge.
 
+The exact source range remains expressed in its native rational time. Its timeline duration is the nearest whole number of timeline frames, so conformance can adjust duration by at most half a timeline frame. AVFoundation scales the inserted composition segment—including linked audio—to that snapped duration. FFmpeg applies the equivalent frame-rate/timestamp normalization and a matching audio tempo adjustment. This avoids fractional final frames and keeps every cut addressable by `HH:MM:SS:FF`.
+
 Selection, hover, playhead, zoom, transient drag state, processing progress, active player item, and undo stacks are UI/session state and are not serialized.
 
 ## 4. Lightweight JSON project
@@ -299,11 +301,13 @@ Use a hybrid architecture:
 - AVFoundation for interactive playback composition.
 - FFmpeg for stabilization processing and final export.
 
-`PlaybackCompositionBuilder` constructs an `AVMutableComposition` from the ordered clip array. An unstabilized or stale clip inserts its exact source range. A valid stabilized clip inserts the corresponding range from its cached proxy. An `AVMutableVideoComposition` applies the timeline canvas, aspect-fit transform, black padding, and frame duration. Audio comes from the same source/proxy range and remains linked.
+`PlaybackCompositionBuilder` constructs an `AVMutableComposition` from the ordered clip array. An unstabilized or stale clip inserts its exact source range. A valid stabilized clip inserts the corresponding range from its cached proxy. An `AVMutableVideoComposition` applies the timeline canvas, aspect-fit transform, black padding, and frame duration. Audio comes from the same source/proxy range and remains linked. Give each clip an isolated audio composition track and combine them with an explicit `AVAudioMix`; the T02 spike found AAC-boundary discontinuities when disjoint clip ranges reused one composition audio track. Track pooling is allowed later only if the parity fixtures remain green.
 
 Structural edits rebuild the in-memory composition; they do not render a full-timeline proxy. Preserve playhead position where possible and rebuild off the main actor, installing the completed player item on `@MainActor`.
 
 The preview is allowed to use the existing 1024-pixel stabilized proxies and bilinear interpolation. Final export always returns to source media and full-quality bicubic stabilization. Automated parity tests must prove that AVFoundation preview timing and FFmpeg output timing agree at every cut.
+
+The T02 parity spike rendered equivalent three-clip compositions through AVFoundation and FFmpeg. The mixed-format 24 fps case produced exactly 60 frames over 2.5 seconds, matching centered padding and 440 Hz → 550 Hz → 440 Hz audio; frame comparison averaged 0.980 SSIM with a 0.935 minimum. A separate 60000/1001 case produced exactly 90 frames over 1.5015 seconds and matching 770 Hz → 440 Hz → 770 Hz audio, averaging 0.987 SSIM with a 0.888 minimum. Encoder/scaler differences prevent byte equality, but every cut and source-frame sequence remained aligned. FFmpeg must receive an explicit rational output rate and `cfr` policy or it can infer the wrong cadence and drop frames. The repeatable validation lives in [`validate-composition-parity.sh`](scripts/spikes/validate-composition-parity.sh) and [the T02 spike record](Tests/Spikes/T02_COMPOSITION_PARITY.md).
 
 ### Thumbnail service
 
