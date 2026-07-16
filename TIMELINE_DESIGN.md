@@ -128,6 +128,8 @@ The first inserted clip establishes `TimelineFormat`. Removing every clip does n
 
 All structural edits snap to timeline frame boundaries. When a source frame rate differs, one shared conversion policy maps timeline time to the closest valid source/media time using documented `CMTime` rounding. A clip must contain at least one timeline frame. Split is disabled on either edge.
 
+The exact source range remains expressed in its native rational time. Its timeline duration is the nearest whole number of timeline frames, so conformance can adjust duration by at most half a timeline frame. AVFoundation scales the inserted composition segment—including linked audio—to that snapped duration. FFmpeg applies the equivalent frame-rate/timestamp normalization and a matching audio tempo adjustment. This avoids fractional final frames and keeps every cut addressable by `HH:MM:SS:FF`.
+
 Selection, hover, playhead, zoom, transient drag state, processing progress, active player item, and undo stacks are UI/session state and are not serialized.
 
 ## 4. Lightweight JSON project
@@ -226,7 +228,11 @@ For compatible colour sources with different dimensions, aspect ratios, or frame
 
 The first timeline release intentionally rejects sources whose colour characteristics are incompatible with the first clip. Resolution and frame-rate normalization are mechanical; silent HDR/SDR, Log, transfer-function, matrix, range, or primaries conversion could visibly damage footage.
 
-`ColourSignature` must therefore include at least primaries, transfer function, matrix, and full/limited range. Import into the Media Library may succeed, but insertion into an established timeline must explain the exact incompatibility. Proper colour management and explicit conversion controls are deferred. This is a known assumption, not an accidental unsupported case.
+`VideoColourMetadata` includes primaries, transfer function, matrix, and full/limited range. Known Apple, FFmpeg, numeric, punctuation, and case aliases normalize to canonical semantic values before comparison. All four normalized values must then be exactly equal.
+
+Missing/unspecified matches only missing/unspecified. An unrecognized tag matches only the same punctuation/case-normalized unrecognized tag. A known value never matches missing or unrecognized metadata. Accepting two identically missing or unrecognized values is a pragmatic assumption: frogmouth cannot prove their underlying colour characteristics without proper pixel conversion, but it rejects every observable conflict. Primaries, transfer, and matrix are never guessed from resolution or camera model. For compressed H.264/HEVC/MPEG-4 YCbCr, Core Media's absent `FullRangeVideo` flag has its specified limited-range meaning.
+
+Import into the Media Library may succeed, but insertion into an established timeline must list every mismatch as `property (timeline: value; clip: value)`, state that frogmouth does not convert colour spaces yet, and tell the user to choose a clip with matching colour metadata. Proper colour management and explicit conversion controls are deferred. This is a known assumption, not an accidental unsupported case. The executable policy and fixture evidence are recorded in [the T03 validation record](Tests/Spikes/T03_COLOUR_COMPATIBILITY.md).
 
 The project was initialized around Canon EOS R5 footage, but compatibility messages and the UI remain camera-agnostic.
 
@@ -274,17 +280,21 @@ Use an app-managed persistent-but-disposable directory such as:
 
 A stabilization cache key includes the asset fingerprint, analyzed source range, ordered preceding pass configuration, current pass profile, frogmouth processing revision, FFmpeg/libvidstab version, and proxy settings. Cache deletion never corrupts a project; it changes configured stabilization to stale. Provide **Clear Project Cache** and **Clear All Caches**.
 
-### Required transform-alignment spike
+### Transform alignment after split — validated decision
 
-`vidstab` transform rows are frame-relative. A child produced by splitting an analyzed range cannot blindly seek to its own source start and feed the unsliced parent `.trf`; the first transform would apply to the wrong frame.
+`vidstabdetect` ASCII rows contain frame-relative local-motion observations. `vidstabtransform` integrates and smooths those observations over the complete input domain. A child produced by splitting an analyzed range therefore cannot seek to its own source start and consume a sliced/renumbered parent `.trf`: both the prior integrated path and surrounding smoothing window would change.
 
-Before finalizing the render planner, prove one of these strategies against a full-domain reference render:
+The T01 spike in [`validate-stabilization-split.sh`](scripts/spikes/validate-stabilization-split.sh) established the render rule:
 
-1. Safely slice and renumber ASCII transform rows for an inward-trimmed child; preferred if frame-identical.
-2. Apply transforms across their original analysis domain and trim afterward; correct but potentially very expensive when many children share a parent range.
-3. Materialize a reusable high-quality stabilized intermediate; potentially large and contrary to lightweight caching.
+1. Each stabilization effect retains the analysis domain on which its transforms were computed.
+2. Apply the transform across that complete domain before trimming any descendant clip.
+3. Model export as a directed acyclic filter graph. Descendants with a common stabilized lineage share one decoded/transformed prefix, then an FFmpeg `split` branches into their exact child ranges.
+4. A later child-specific stabilization pass starts a new effect node after that branch and records the child's then-current domain.
+5. Preview proxies likewise cover the effect's analysis domain; child clips map to exact proxy subranges.
 
-Do not choose based on assumption. The spike must compare first/last frames, stacked passes, non-integer frame rates, split boundaries, render time, and disk usage. Re-analysis on split is not an acceptable fallback because it violates the confirmed inheritance behavior.
+This strategy was frame-identical to a full stabilized reference for every child frame at 24 fps and 60000/1001 fps, including first/last boundaries and two stacked passes. Naively sliced local motions differed on 40 of 48 frames in the 24 fps child. On the small fixture, one shared-prefix render took 0.37 seconds versus 0.68 seconds for two repeated full-domain renders at 24 fps, and 0.39 versus 0.74 seconds at 60000/1001. These absolute timings are not production benchmarks; they demonstrate elimination of duplicated work.
+
+Do not slice `.trf` local-motion rows and do not re-analyze on split. Also avoid a full-quality stabilized intermediate: it is unnecessary when one filter graph can share the prefix and would create unacceptable 4K disk usage. Cache identity and render planning must preserve effect-lineage and analysis-domain UUIDs so common prefixes can be recognized after split, duplicate, reorder, save, and reopen. Detailed evidence is in [the T01 spike record](Tests/Spikes/T01_STABILIZATION_SPLIT.md).
 
 ## 7. Preview architecture
 
@@ -295,11 +305,13 @@ Use a hybrid architecture:
 - AVFoundation for interactive playback composition.
 - FFmpeg for stabilization processing and final export.
 
-`PlaybackCompositionBuilder` constructs an `AVMutableComposition` from the ordered clip array. An unstabilized or stale clip inserts its exact source range. A valid stabilized clip inserts the corresponding range from its cached proxy. An `AVMutableVideoComposition` applies the timeline canvas, aspect-fit transform, black padding, and frame duration. Audio comes from the same source/proxy range and remains linked.
+`PlaybackCompositionBuilder` constructs an `AVMutableComposition` from the ordered clip array. An unstabilized or stale clip inserts its exact source range. A valid stabilized clip inserts the corresponding range from its cached proxy. An `AVMutableVideoComposition` applies the timeline canvas, aspect-fit transform, black padding, and frame duration. Audio comes from the same source/proxy range and remains linked. Give each clip an isolated audio composition track and combine them with an explicit `AVAudioMix`; the T02 spike found AAC-boundary discontinuities when disjoint clip ranges reused one composition audio track. Track pooling is allowed later only if the parity fixtures remain green.
 
 Structural edits rebuild the in-memory composition; they do not render a full-timeline proxy. Preserve playhead position where possible and rebuild off the main actor, installing the completed player item on `@MainActor`.
 
 The preview is allowed to use the existing 1024-pixel stabilized proxies and bilinear interpolation. Final export always returns to source media and full-quality bicubic stabilization. Automated parity tests must prove that AVFoundation preview timing and FFmpeg output timing agree at every cut.
+
+The T02 parity spike rendered equivalent three-clip compositions through AVFoundation and FFmpeg. The mixed-format 24 fps case produced exactly 60 frames over 2.5 seconds, matching centered padding and 440 Hz → 550 Hz → 440 Hz audio; frame comparison averaged 0.980 SSIM with a 0.935 minimum. A separate 60000/1001 case produced exactly 90 frames over 1.5015 seconds and matching 770 Hz → 440 Hz → 770 Hz audio, averaging 0.987 SSIM with a 0.888 minimum. Encoder/scaler differences prevent byte equality, but every cut and source-frame sequence remained aligned. FFmpeg must receive an explicit rational output rate and `cfr` policy or it can infer the wrong cadence and drop frames. The repeatable validation lives in [`validate-composition-parity.sh`](scripts/spikes/validate-composition-parity.sh) and [the T02 spike record](Tests/Spikes/T02_COMPOSITION_PARITY.md).
 
 ### Thumbnail service
 

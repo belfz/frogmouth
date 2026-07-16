@@ -19,11 +19,11 @@ This is the ordered execution backlog for [TIMELINE_DESIGN.md](TIMELINE_DESIGN.m
 
 Dependencies: none.
 
-- [ ] Record the current 14-test baseline and release build command.
-- [ ] Add a fixture generator for short, frame-numbered videos with distinctive audio tones.
-- [ ] Generate compatible variants: different dimensions, aspect ratios, rational frame rates, and a silent clip.
-- [ ] Generate at least one intentionally incompatible colour-signaling fixture.
-- [ ] Add helpers that inspect exact frame count, duration, audio presence, and colour tags.
+- [x] Record the current 14-test baseline and release build command.
+- [x] Add a fixture generator for short, frame-numbered videos with distinctive audio tones.
+- [x] Generate compatible variants: different dimensions, aspect ratios, rational frame rates, and a silent clip.
+- [x] Generate at least one intentionally incompatible colour-signaling fixture.
+- [x] Add helpers that inspect exact frame count, duration, audio presence, and colour tags.
 
 Acceptance:
 
@@ -35,13 +35,13 @@ Acceptance:
 
 Dependencies: T00.
 
-- [ ] Analyze and stabilize a known clip over a parent range.
-- [ ] Split/trim the range at several frame-aligned points, including 59.94 fps boundaries.
-- [ ] Prototype slicing and renumbering the ASCII `.trf` rows.
-- [ ] Compare child renders with the corresponding frames from a full-domain stabilized render.
-- [ ] Repeat with two stacked stabilization passes.
-- [ ] Measure the fallback strategy of processing the full analysis domain and trimming afterward.
-- [ ] Document the chosen algorithm and cache representation in `TIMELINE_DESIGN.md`.
+- [x] Analyze and stabilize a known clip over a parent range.
+- [x] Split/trim the range at several frame-aligned points, including 59.94 fps boundaries.
+- [x] Prototype slicing and renumbering the ASCII `.trf` rows.
+- [x] Compare child renders with the corresponding frames from a full-domain stabilized render.
+- [x] Repeat with two stacked stabilization passes.
+- [x] Measure the fallback strategy of processing the full analysis domain and trimming afterward.
+- [x] Document the chosen algorithm and cache representation in `TIMELINE_DESIGN.md`.
 
 Acceptance:
 
@@ -54,12 +54,12 @@ Acceptance:
 
 Dependencies: T00.
 
-- [ ] Build a throwaway `AVMutableComposition` from several exact fixture ranges.
-- [ ] Build the equivalent FFmpeg hard-cut output.
-- [ ] Cover repeated ranges from one asset and ranges from several assets.
-- [ ] Conform compatible resolution/aspect-ratio/frame-rate differences to the first clip's format.
-- [ ] Compare total duration, boundary frames, playhead mapping, and audio timing.
-- [ ] Verify centre-padding and rational 60000/1001 output behavior.
+- [x] Build a throwaway `AVMutableComposition` from several exact fixture ranges.
+- [x] Build the equivalent FFmpeg hard-cut output.
+- [x] Cover repeated ranges from one asset and ranges from several assets.
+- [x] Conform compatible resolution/aspect-ratio/frame-rate differences to the first clip's format.
+- [x] Compare total duration, boundary frames, playhead mapping, and audio timing.
+- [x] Verify centre-padding and rational 60000/1001 output behavior.
 
 Acceptance:
 
@@ -71,10 +71,10 @@ Acceptance:
 
 Dependencies: T00.
 
-- [ ] Extend inspection facts with primaries, transfer function, matrix, and range.
-- [ ] Define exact equality/compatibility rules, including missing or unknown tags.
-- [ ] Test matching SDR fixtures and deliberately conflicting fixtures.
-- [ ] Specify the actionable error text naming each mismatched property.
+- [x] Extend inspection facts with primaries, transfer function, matrix, and range.
+- [x] Define exact equality/compatibility rules, including missing or unknown tags.
+- [x] Test matching SDR fixtures and deliberately conflicting fixtures.
+- [x] Specify the actionable error text naming each mismatched property.
 
 Acceptance:
 
@@ -457,4 +457,3 @@ These are intentionally not prerequisites for T00–T22:
 - [ ] Folder-assisted missing-media search and Relink UI.
 - [ ] Exposed stabilization-pass stack and per-pass controls.
 - [ ] User-configurable timeline/editor layout.
-
