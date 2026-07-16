@@ -120,14 +120,14 @@ private struct ProjectRootView: View {
     var body: some View {
         ZStack {
             if let project = document.project {
-                ProjectPlaceholderView(document: document, project: project)
+                ProjectEditorShell(document: document, project: project)
             } else {
                 ProjectStartupView(document: document)
             }
 
             if document.isBusy {
                 Color.black.opacity(0.15).ignoresSafeArea()
-                ProgressView("Working…")
+                ProgressView(activityTitle)
                     .controlSize(.large)
                     .padding(28)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
@@ -140,6 +140,11 @@ private struct ProjectRootView: View {
         } isTargeted: {
             isDropTarget = $0
         }
+    }
+
+    private var activityTitle: String {
+        guard let progress = document.importProgress else { return "Working…" }
+        return "Importing \(progress.completed + 1) of \(progress.total): \(progress.filename)"
     }
 }
 
@@ -170,74 +175,6 @@ private struct ProjectStartupView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)
-    }
-}
-
-private struct ProjectPlaceholderView: View {
-    @ObservedObject var document: ProjectDocumentViewModel
-    let project: ProjectState
-
-    var body: some View {
-        VStack(spacing: 20) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(project.name)
-                        .font(.largeTitle.bold())
-                    Text(document.fileURL?.path ?? "Untitled project — choose Save to create a .frogmouth file")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Spacer()
-                Button("Import Videos…", action: document.presentImportVideosPanel)
-                    .buttonStyle(.borderedProminent)
-            }
-
-            GroupBox("Project Contents") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Label("\(project.mediaLibrary.count) source file\(project.mediaLibrary.count == 1 ? "" : "s")", systemImage: "film.stack")
-                    Label("\(project.clips.count) timeline clip\(project.clips.count == 1 ? "" : "s")", systemImage: "timeline.selection")
-                    if project.mediaLibrary.isEmpty {
-                        ContentUnavailableView(
-                            "No videos yet",
-                            systemImage: "film",
-                            description: Text("Import videos to append them to this project's timeline.")
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 220)
-                    } else {
-                        ForEach(project.mediaLibrary) { asset in
-                            HStack {
-                                Image(systemName: "film")
-                                    .foregroundStyle(.secondary)
-                                Text(URL(fileURLWithPath: asset.path.absoluteFallback).lastPathComponent)
-                                    .lineLimit(1)
-                                Spacer()
-                                Text("\(asset.inspected.width)×\(asset.inspected.height)")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
-            }
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .toolbar {
-            ToolbarItemGroup {
-                Button(action: document.presentImportVideosPanel) {
-                    Label("Import Videos", systemImage: "plus")
-                }
-                .disabled(!document.canImport)
-                Button(action: document.save) {
-                    Label("Save", systemImage: "square.and.arrow.down")
-                }
-                .disabled(!document.canSave)
-            }
-        }
     }
 }
 

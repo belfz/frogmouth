@@ -340,6 +340,10 @@ Use a hybrid architecture:
 - AVFoundation for interactive playback composition.
 - FFmpeg for stabilization processing and final export.
 
+The Phase 2 shell is divided into a collapsible left Media Library, central timeline viewer, collapsible right inspector, and bottom gapless clip strip. Media Library rows are keyed by asset UUID and show a neutral thumbnail placeholder, filename, duration, dimensions, frame rate, and timeline usage count. Importing into an existing project adds sources to the library without silently creating clips; a full source is appended explicitly or dragged to a visible timeline boundary, and the same asset can be inserted repeatedly. Removal is routed through `removeUnusedMedia`, so a referenced source remains visible and the error reports its exact usage count. Import inspection is asynchronous, ordered, and surfaced as progress rather than blocking the main actor without feedback.
+
+The central region is deliberately a timeline viewer, not a source in/out editor. Library selection exposes source facts in the inspector; timeline selection exposes clip facts. There is no second source playhead or source-range workflow hidden in this shell.
+
 `PlaybackCompositionBuilder` constructs an `AVMutableComposition` from the ordered clip array. An unstabilized or stale clip inserts its exact source range. A valid stabilized clip inserts the corresponding range from its cached proxy. An `AVMutableVideoComposition` applies the timeline canvas, aspect-fit transform, black padding, and frame duration. Audio comes from the same source/proxy range and remains linked. Give each clip an isolated audio composition track and combine them with an explicit `AVAudioMix`; the T02 spike found AAC-boundary discontinuities when disjoint clip ranges reused one composition audio track. Track pooling is allowed later only if the parity fixtures remain green.
 
 Structural edits rebuild the in-memory composition; they do not render a full-timeline proxy. Preserve playhead position where possible and rebuild off the main actor, installing the completed player item on `@MainActor`.

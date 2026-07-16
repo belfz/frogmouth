@@ -221,12 +221,12 @@ Acceptance:
 
 Dependencies: T06, T07, T10.
 
-- [ ] Add collapsible left library, centre viewer, right inspector, and bottom timeline regions.
-- [ ] Import one or several sources into the library with progress/error feedback.
-- [ ] Show thumbnail placeholder, filename, duration, and compact media facts.
-- [ ] Append or drag a full source into a timeline boundary.
-- [ ] Allow repeated insertion of one asset.
-- [ ] Refuse removal while referenced and show the usage count.
+- [x] Add collapsible left library, centre viewer, right inspector, and bottom timeline regions.
+- [x] Import one or several sources into the library with progress/error feedback.
+- [x] Show thumbnail placeholder, filename, duration, and compact media facts.
+- [x] Append or drag a full source into a timeline boundary.
+- [x] Allow repeated insertion of one asset.
+- [x] Refuse removal while referenced and show the usage count.
 
 Acceptance:
 

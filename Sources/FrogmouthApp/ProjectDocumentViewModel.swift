@@ -5,6 +5,12 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class ProjectDocumentViewModel: ObservableObject {
+    struct ImportProgress: Equatable {
+        let completed: Int
+        let total: Int
+        let filename: String
+    }
+
     @Published private(set) var project: ProjectState?
     @Published private(set) var fileURL: URL?
     @Published private(set) var resolvedMediaURLs: [MediaAsset.ID: URL] = [:]
@@ -12,6 +18,9 @@ final class ProjectDocumentViewModel: ObservableObject {
     @Published private(set) var hasUnsavedChanges = false
     @Published private(set) var canUndo = false
     @Published private(set) var canRedo = false
+    @Published private(set) var importProgress: ImportProgress?
+    @Published private(set) var selectedAssetID: MediaAsset.ID?
+    @Published private(set) var selectedClipID: TimelineClip.ID?
     @Published var errorMessage: String?
     @Published var isUnsavedConfirmationPresented = false
 
@@ -191,7 +200,47 @@ final class ProjectDocumentViewModel: ObservableObject {
             request(.importAsNewProject(urls))
             return
         }
-        Task { await importIntoCurrentProject(urls) }
+        Task { await importIntoCurrentProject(urls, appendToTimeline: false) }
+    }
+
+    func selectAsset(_ assetID: MediaAsset.ID?) {
+        selectedAssetID = assetID
+        selectedClipID = nil
+    }
+
+    func selectClip(_ clipID: TimelineClip.ID?) {
+        selectedClipID = clipID
+        guard let clipID,
+              let clip = project?.clips.first(where: { $0.id == clipID }) else { return }
+        selectedAssetID = clip.assetID
+    }
+
+    func insertAssetOnTimeline(_ assetID: MediaAsset.ID, at index: Int? = nil) {
+        guard let session,
+              let project,
+              let asset = project.mediaLibrary.first(where: { $0.id == assetID }) else { return }
+        guard let sourceRange = try? MediaTimeRange(
+            start: .zero,
+            duration: asset.inspected.duration
+        ) else { return }
+        let clip = TimelineClip(
+            assetID: assetID,
+            sourceRange: sourceRange
+        )
+        let command: ProjectCommand
+        if let index {
+            command = .insertClip(clip, atIndex: index)
+        } else {
+            command = .appendClip(clip)
+        }
+        Task { await apply(command, to: session, selectingClip: clip.id) }
+    }
+
+    func removeAssetFromLibrary(_ assetID: MediaAsset.ID) {
+        guard let session else { return }
+        Task {
+            await apply(.removeUnusedMedia(assetID: assetID), to: session)
+        }
     }
 
     func resolvedURL(for assetID: MediaAsset.ID) -> URL? {
@@ -230,7 +279,7 @@ final class ProjectDocumentViewModel: ObservableObject {
                 await refreshPublishedState()
             case let .importAsNewProject(urls):
                 let newSession = ProjectDocumentSession.newProject(store: store)
-                try await importVideos(urls, into: newSession)
+                try await importVideos(urls, into: newSession, appendToTimeline: true)
                 install(newSession)
                 await refreshPublishedState()
                 scheduleAutosaveStatusRefresh()
@@ -246,12 +295,19 @@ final class ProjectDocumentViewModel: ObservableObject {
         }
     }
 
-    private func importIntoCurrentProject(_ urls: [URL]) async {
+    private func importIntoCurrentProject(
+        _ urls: [URL],
+        appendToTimeline: Bool
+    ) async {
         guard let session else { return }
         isBusy = true
         defer { isBusy = false }
         do {
-            try await importVideos(urls, into: session)
+            try await importVideos(
+                urls,
+                into: session,
+                appendToTimeline: appendToTimeline
+            )
             await refreshPublishedState()
             scheduleAutosaveStatusRefresh()
         } catch {
@@ -262,10 +318,15 @@ final class ProjectDocumentViewModel: ObservableObject {
 
     private func importVideos(
         _ urls: [URL],
-        into session: ProjectDocumentSession
+        into session: ProjectDocumentSession,
+        appendToTimeline: Bool
     ) async throws {
         let current = await session.project
-        let commands = try await importCommands(for: urls, startingFrom: current)
+        let commands = try await importCommands(
+            for: urls,
+            startingFrom: current,
+            appendToTimeline: appendToTimeline
+        )
         for command in commands {
             try await session.apply(command)
         }
@@ -273,13 +334,20 @@ final class ProjectDocumentViewModel: ObservableObject {
 
     private func importCommands(
         for urls: [URL],
-        startingFrom project: ProjectState
+        startingFrom project: ProjectState,
+        appendToTimeline: Bool
     ) async throws -> [ProjectCommand] {
         var validator = ProjectEditor(project: project)
         var commands: [ProjectCommand] = []
+        defer { importProgress = nil }
 
-        for rawURL in urls {
+        for (offset, rawURL) in urls.enumerated() {
             let url = rawURL.standardizedFileURL
+            importProgress = ImportProgress(
+                completed: offset,
+                total: urls.count,
+                filename: url.lastPathComponent
+            )
             let existing = validator.project.mediaLibrary.first { asset in
                 URL(fileURLWithPath: asset.path.absoluteFallback).standardizedFileURL == url
             }
@@ -298,6 +366,7 @@ final class ProjectDocumentViewModel: ObservableObject {
                 commands.append(command)
             }
 
+            guard appendToTimeline else { continue }
             let clip = TimelineClip(
                 assetID: asset.id,
                 sourceRange: try MediaTimeRange(start: .zero, duration: asset.inspected.duration)
@@ -307,6 +376,23 @@ final class ProjectDocumentViewModel: ObservableObject {
             commands.append(command)
         }
         return commands
+    }
+
+    private func apply(
+        _ command: ProjectCommand,
+        to session: ProjectDocumentSession,
+        selectingClip clipID: TimelineClip.ID? = nil
+    ) async {
+        guard !isBusy else { return }
+        do {
+            try await session.apply(command)
+            if let clipID { selectedClipID = clipID }
+            await refreshPublishedState()
+            scheduleAutosaveStatusRefresh()
+        } catch {
+            errorMessage = error.localizedDescription
+            await refreshPublishedState()
+        }
     }
 
     @discardableResult
@@ -370,6 +456,33 @@ final class ProjectDocumentViewModel: ObservableObject {
         hasUnsavedChanges = await session.isModified
         canUndo = await session.canUndo
         canRedo = await session.canRedo
+        reconcileSelection()
+    }
+
+    private func reconcileSelection() {
+        guard let project else {
+            selectedAssetID = nil
+            selectedClipID = nil
+            return
+        }
+        if let selectedClipID,
+           let selectedClip = project.clips.first(where: { $0.id == selectedClipID }) {
+            selectedAssetID = selectedClip.assetID
+        } else if selectedClipID != nil {
+            self.selectedClipID = nil
+        }
+        if let selectedAssetID,
+           !project.mediaLibrary.contains(where: { $0.id == selectedAssetID }) {
+            self.selectedAssetID = nil
+        }
+        if selectedClipID == nil, selectedAssetID == nil {
+            if let clip = project.clips.first {
+                selectedClipID = clip.id
+                selectedAssetID = clip.assetID
+            } else {
+                selectedAssetID = project.mediaLibrary.first?.id
+            }
+        }
     }
 
     private func scheduleAutosaveStatusRefresh() {
