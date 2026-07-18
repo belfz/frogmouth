@@ -356,14 +356,14 @@ Dependencies: T01, T02, T03, T06, T07, T16.
 
 Suggested types: `ClipRenderPlan`, `TimelineRenderPlan`, `TimelineFFmpegCommandFactory`.
 
-- [ ] Map unique source assets to FFmpeg inputs.
-- [ ] Build per-clip video branches for exact range, stabilization, timestamp reset, fps, scale, pad, sample aspect ratio, and pixel format.
-- [ ] Build linked audio branches with trim, timestamp reset, resampling, and channel normalization.
-- [ ] Preserve continuous audio across contiguous split children.
-- [ ] Add 5–10 ms non-overlapping anti-click fades at unrelated/non-contiguous boundaries.
-- [ ] Synthesize silence for isolated silent clips when the timeline otherwise has audio.
-- [ ] Concatenate normalized branches in timeline order.
-- [ ] Calculate conservative timeline bitrate and export progress duration.
+- [x] Map unique source assets to FFmpeg inputs.
+- [x] Build per-clip video branches for exact range, stabilization, timestamp reset, fps, scale, pad, sample aspect ratio, and pixel format.
+- [x] Build linked audio branches with trim, timestamp reset, resampling, and channel normalization.
+- [x] Preserve continuous audio across contiguous split children.
+- [x] Add 5–10 ms non-overlapping anti-click fades at unrelated/non-contiguous boundaries.
+- [x] Synthesize silence for isolated silent clips when the timeline otherwise has audio.
+- [x] Concatenate normalized branches in timeline order.
+- [x] Calculate conservative timeline bitrate and export progress duration.
 
 Acceptance:
 
@@ -375,20 +375,25 @@ Acceptance:
 
 Dependencies: T18.
 
-- [ ] Export the entire timeline only.
-- [ ] Default to the project directory/name; use first-source directory for untitled projects.
-- [ ] Encode HEVC with `hevc_videotoolbox`, `hvc1`, conservative bitrate, and fast start.
-- [ ] Encode normalized timeline audio as high-quality AAC.
-- [ ] Preserve only common valid source metadata plus timeline technical colour/orientation facts.
-- [ ] Set export creation time, project name, and `Encoded by frogmouth`.
-- [ ] Write to a temporary output, validate it, and atomically move/replace the final file.
-- [ ] Reveal a successful export in Finder and retain manual Reveal Export.
+- [x] Export the entire timeline only.
+- [x] Default to the project directory/name; use first-source directory for untitled projects.
+- [x] Encode HEVC with `hevc_videotoolbox`, `hvc1`, conservative bitrate, and fast start.
+- [x] Encode normalized timeline audio as high-quality AAC.
+- [x] Preserve only common valid source metadata plus timeline technical colour/orientation facts.
+- [x] Set export creation time, project name, and `Encoded by frogmouth`.
+- [x] Write to a temporary output, validate it, and atomically move/replace the final file.
+- [x] Reveal a successful export in Finder and retain manual Reveal Export.
 
 Acceptance:
 
 - Export is disabled for empty/invalid timelines, active processing, missing used media, or stale stabilization.
 - Output inspection verifies codec, canvas, rational fps, colour, audio, duration, metadata, and project provenance.
 - Cancellation/failure never leaves a misleading final output.
+
+Implementation note: output validation uses AVFoundation's exact stream facts plus common,
+format-specific, and dedicated creation-date metadata. The temporary render lives beside the
+chosen destination, so the final POSIX rename replaces an existing export atomically on the
+same volume; validation failure and cancellation remove only the hidden temporary file.
 
 ## Phase 5 — hardening and migration
 

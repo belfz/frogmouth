@@ -128,7 +128,28 @@ private struct ProjectRootView: View {
                 ProjectStartupView(document: document)
             }
 
-            if document.stabilizationProcessingPhase != .idle {
+            if document.timelineExportProcessingPhase != .idle {
+                Color.black.opacity(0.22).ignoresSafeArea()
+                VStack(spacing: 14) {
+                    if let progress = document.timelineExportProcessingPhase.progress {
+                        ProgressView(
+                            document.timelineExportProcessingPhase.title,
+                            value: progress,
+                            total: 1
+                        )
+                        .frame(width: 280)
+                    } else {
+                        ProgressView(document.timelineExportProcessingPhase.title)
+                            .controlSize(.large)
+                    }
+                    Button("Cancel", role: .cancel) {
+                        document.cancelTimelineExport()
+                    }
+                }
+                .padding(28)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .shadow(radius: 18)
+            } else if document.stabilizationProcessingPhase != .idle {
                 Color.black.opacity(0.22).ignoresSafeArea()
                 VStack(spacing: 14) {
                     if let progress = document.stabilizationProcessingPhase.progress {
