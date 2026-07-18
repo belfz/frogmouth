@@ -34,6 +34,8 @@ final class ProjectDocumentViewModel: ObservableObject {
     @Published private(set) var trimPreview: TrimPreview?
     @Published private(set) var stabilizationStatuses: [TimelineClip.ID: StabilizationStatus] = [:]
     @Published private(set) var stabilizationProcessingPhase: ProcessingPhase = .idle
+    @Published private(set) var timelineExportProcessingPhase: ProcessingPhase = .idle
+    @Published private(set) var lastExportURL: URL?
     @Published var errorMessage: String?
     @Published var isUnsavedConfirmationPresented = false
 
@@ -49,6 +51,8 @@ final class ProjectDocumentViewModel: ObservableObject {
     private let fingerprinter: any MediaFingerprinting
     private let stabilizationStatusResolver: StabilizationStatusResolver
     private let stabilizationProcessor: ClipStabilizationProcessor
+    private let timelineExporter: TimelineExporter
+    private let diagnostics: DiagnosticLogStore
     let thumbnailService: ThumbnailService
     let playback: PlaybackCoordinator
     private var session: ProjectDocumentSession?
@@ -57,6 +61,7 @@ final class ProjectDocumentViewModel: ObservableObject {
     private var stabilizationStatusTask: Task<Void, Never>?
     private var stabilizationProcessingTask: Task<Void, Never>?
     private var stabilizationProcessingGeneration = UUID()
+    private var timelineExportTask: Task<Void, Never>?
     private var stabilizationValidations: [TimelineClip.ID: StabilizationValidation] = [:]
     private var ffmpegInstallation: FFmpegInstallation?
     private var windowCloseCompletion: (() -> Void)?
@@ -69,7 +74,8 @@ final class ProjectDocumentViewModel: ObservableObject {
         thumbnailService: ThumbnailService = ThumbnailService(),
         playback: PlaybackCoordinator = PlaybackCoordinator(),
         diagnostics: DiagnosticLogStore = DiagnosticLogStore(),
-        stabilizationProcessor: ClipStabilizationProcessor? = nil
+        stabilizationProcessor: ClipStabilizationProcessor? = nil,
+        timelineExporter: TimelineExporter? = nil
     ) {
         self.store = store
         self.factsInspector = factsInspector
@@ -80,6 +86,10 @@ final class ProjectDocumentViewModel: ObservableObject {
             identityBuilder: stabilizationStatusResolver.identityBuilder,
             runner: FFmpegRunner(diagnostics: diagnostics)
         )
+        self.timelineExporter = timelineExporter ?? TimelineExporter(
+            runner: FFmpegRunner(diagnostics: diagnostics)
+        )
+        self.diagnostics = diagnostics
         self.thumbnailService = thumbnailService
         self.playback = playback
         playback.playheadDidChange = { [weak self] frame, location in
@@ -105,13 +115,18 @@ final class ProjectDocumentViewModel: ObservableObject {
     }
     var canExportTimeline: Bool {
         guard !isBusy,
+              trimPreview == nil,
+              ffmpegInstallation != nil,
               let project,
               !project.clips.isEmpty,
               (try? TimelineIndex(project: project)) != nil else { return false }
-        return project.clips.allSatisfy {
-            !stabilizationStatus(for: $0, in: project).blocksExport
+        return project.clips.allSatisfy { clip in
+            guard let url = resolvedMediaURLs[clip.assetID],
+                  FileManager.default.fileExists(atPath: url.path) else { return false }
+            return !stabilizationStatus(for: clip, in: project).blocksExport
         }
     }
+    var canRevealExport: Bool { lastExportURL != nil }
     var canApplySelectedStabilization: Bool {
         guard canEditSelectedClip,
               ffmpegInstallation != nil,
@@ -198,6 +213,34 @@ final class ProjectDocumentViewModel: ObservableObject {
     func cancelStabilizationProcessing() {
         stabilizationProcessingTask?.cancel()
         stabilizationProcessor.cancel()
+    }
+
+    func presentTimelineExportPanel() {
+        guard canExportTimeline,
+              let project,
+              let suggestion = TimelineExportDestinationPolicy.suggestion(
+                  project: project,
+                  projectFileURL: fileURL,
+                  mediaURLs: resolvedMediaURLs
+              ) else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Movie]
+        panel.canCreateDirectories = true
+        panel.directoryURL = suggestion.directoryURL
+        panel.nameFieldStringValue = suggestion.filename
+        panel.message = "Export the complete timeline as a high-quality HEVC video"
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        startTimelineExport(to: destination)
+    }
+
+    func cancelTimelineExport() {
+        timelineExportTask?.cancel()
+        timelineExporter.cancel()
+    }
+
+    func revealLastExport() {
+        guard let lastExportURL else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([lastExportURL])
     }
 
     func requestNewProject() {
@@ -554,8 +597,92 @@ final class ProjectDocumentViewModel: ObservableObject {
         autosaveStatusTask?.cancel()
         stabilizationStatusTask?.cancel()
         stabilizationProcessingTask?.cancel()
+        timelineExportTask?.cancel()
         stabilizationProcessor.cancel()
+        timelineExporter.cancel()
         playback.shutdown()
+    }
+
+    private func startTimelineExport(to destination: URL) {
+        guard timelineExportTask == nil,
+              canExportTimeline,
+              let project,
+              let installation = ffmpegInstallation else { return }
+
+        let transforms: [TimelineClip.ID: [StabilizationEffect.ID: URL]]
+        do {
+            transforms = try stabilizationTransforms(for: project)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+
+        let exporter = timelineExporter
+        let request = TimelineExportRequest(
+            renderRequest: TimelineRenderRequest(
+                project: project,
+                mediaURLs: resolvedMediaURLs,
+                stabilizationTransforms: transforms
+            ),
+            destinationURL: destination,
+            installation: installation,
+            sessionID: project.id.uuidString
+        )
+        isBusy = true
+        timelineExportProcessingPhase = .exporting(progress: 0)
+        timelineExportTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.timelineExportTask = nil
+                self.timelineExportProcessingPhase = .idle
+                self.isBusy = false
+            }
+            do {
+                let result = try await exporter.export(request) { [weak self] progress in
+                    Task { @MainActor [weak self] in
+                        guard self?.timelineExportTask != nil else { return }
+                        self?.timelineExportProcessingPhase = .exporting(progress: progress)
+                    }
+                }
+                try Task.checkCancellation()
+                self.lastExportURL = result.destinationURL
+                self.diagnostics.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "timeline-export",
+                    message: "completed output=\(result.destinationURL.path)"
+                )
+                NSWorkspace.shared.activateFileViewerSelecting([result.destinationURL])
+            } catch is CancellationError {
+                // A cancelled export never installs its temporary file.
+            } catch let error as FrogmouthError where error == .cancelled {
+                // FFmpeg reports user cancellation as a domain error.
+            } catch {
+                self.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func stabilizationTransforms(
+        for project: ProjectState
+    ) throws -> [TimelineClip.ID: [StabilizationEffect.ID: URL]] {
+        var result: [TimelineClip.ID: [StabilizationEffect.ID: URL]] = [:]
+        for clip in project.clips where !clip.stabilizationPasses.isEmpty {
+            guard let validation = stabilizationValidations[clip.id],
+                  validation.status == .valid else {
+                throw TimelineRenderPlanningError.missingStabilizationTransforms(
+                    clip.stabilizationPasses[0].id
+                )
+            }
+            let transforms = Dictionary(uniqueKeysWithValues: validation.artifacts.map {
+                ($0.effectID, $0.transforms.url)
+            })
+            for effect in clip.stabilizationPasses where transforms[effect.id] == nil {
+                throw TimelineRenderPlanningError.missingStabilizationTransforms(effect.id)
+            }
+            result[clip.id] = transforms
+        }
+        return result
     }
 
     private func startStabilizationProcessing(
@@ -826,6 +953,7 @@ final class ProjectDocumentViewModel: ObservableObject {
         trimPreview = nil
         stabilizationStatuses = [:]
         stabilizationValidations = [:]
+        lastExportURL = nil
         self.session = session
     }
 

@@ -31,7 +31,8 @@ public enum TimelineFFmpegCommandFactory {
     public static func arguments(
         for plan: TimelineRenderPlan,
         output: URL,
-        encoding: TimelineRenderEncoding = .delivery
+        encoding: TimelineRenderEncoding = .delivery,
+        metadata: TimelineExportMetadata? = nil
     ) throws -> [String] {
         guard !plan.clips.isEmpty else { throw TimelineFFmpegCommandError.emptyRenderPlan }
         guard plan.format.width > 0, plan.format.height > 0 else {
@@ -71,6 +72,8 @@ public enum TimelineFFmpegCommandFactory {
             "-r", rate(plan.format.frameRate),
             "-fps_mode", "cfr",
         ]
+        arguments += colourArguments(plan.format.colour)
+        arguments += ["-metadata:s:v:0", "rotate=0"]
 
         switch encoding {
         case .delivery:
@@ -90,6 +93,12 @@ public enum TimelineFFmpegCommandFactory {
                 "-pix_fmt", "yuv422p10le",
             ]
             if plan.hasAudio { arguments += ["-c:a", "pcm_s16le"] }
+        }
+        if let metadata {
+            arguments += ["-map_metadata", "-1"]
+            for (key, value) in metadata.ffmpegTags.sorted(by: { $0.key < $1.key }) {
+                arguments += ["-metadata", "\(key)=\(value)"]
+            }
         }
         arguments.append(output.path)
         return arguments
@@ -297,6 +306,37 @@ public enum TimelineFFmpegCommandFactory {
         }
         if abs(remaining - 1) > 0.000_001 { factors.append(remaining) }
         return factors.map { "atempo=\(time($0))" }
+    }
+
+    private static func colourArguments(_ colour: VideoColourMetadata) -> [String] {
+        var arguments: [String] = []
+        if let value = ffmpegColourValue(colour.primaries, property: .primaries) {
+            arguments += ["-color_primaries", value]
+        }
+        if let value = ffmpegColourValue(colour.transferFunction, property: .transferFunction) {
+            arguments += ["-color_trc", value]
+        }
+        if let value = ffmpegColourValue(colour.matrix, property: .matrix) {
+            arguments += ["-colorspace", value]
+        }
+        if let value = ffmpegColourValue(colour.range, property: .range) {
+            arguments += ["-color_range", value]
+        }
+        return arguments
+    }
+
+    private static func ffmpegColourValue(
+        _ value: ColourMetadataValue,
+        property: ColourProperty
+    ) -> String? {
+        guard case let .known(identifier) = value else { return nil }
+        return switch (property, identifier) {
+        case (.transferFunction, "pq"): "smpte2084"
+        case (.transferFunction, "hlg"): "arib-std-b67"
+        case (.range, "limited"): "tv"
+        case (.range, "full"): "pc"
+        default: identifier
+        }
     }
 
     private static func channelLayout(_ channels: Int) -> String {

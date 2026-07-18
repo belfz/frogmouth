@@ -54,12 +54,38 @@ public struct MediaInspector: MediaInspecting {
                 }
             }
 
-            let metadataItems = try await asset.load(.metadata)
+            var metadataItems = try await asset.load(.metadata)
+            for format in try await asset.load(.availableMetadataFormats) {
+                metadataItems.append(contentsOf: try await asset.loadMetadata(for: format))
+            }
             var metadata: [String: String] = [:]
             for item in metadataItems {
-                guard let key = item.commonKey?.rawValue,
-                      let value = try? await item.load(.stringValue) else { continue }
+                guard let key = item.commonKey?.rawValue
+                        ?? item.identifier?.rawValue
+                        ?? item.key.map({ String(describing: $0) }) else { continue }
+                let value: String?
+                if let stringValue = try? await item.load(.stringValue) {
+                    value = stringValue
+                } else if let dateValue = try? await item.load(.dateValue) {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime]
+                    value = formatter.string(from: dateValue)
+                } else if let numberValue = try? await item.load(.numberValue) {
+                    value = numberValue.stringValue
+                } else {
+                    value = nil
+                }
+                guard let value else { continue }
                 metadata[key] = value
+            }
+            if let creationItem = try await asset.load(.creationDate) {
+                if let value = try? await creationItem.load(.stringValue) {
+                    metadata[AVMetadataKey.commonKeyCreationDate.rawValue] = value
+                } else if let date = try? await creationItem.load(.dateValue) {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime]
+                    metadata[AVMetadataKey.commonKeyCreationDate.rawValue] = formatter.string(from: date)
+                }
             }
 
             let values = try url.resourceValues(forKeys: [.fileSizeKey])

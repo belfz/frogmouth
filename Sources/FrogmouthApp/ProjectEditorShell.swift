@@ -79,6 +79,18 @@ struct ProjectEditorShell: View {
                     Label("Save", systemImage: "square.and.arrow.down")
                 }
                 .disabled(!document.canSave)
+
+                Button(action: document.presentTimelineExportPanel) {
+                    Label("Export Timeline", systemImage: "square.and.arrow.up")
+                }
+                .disabled(!document.canExportTimeline)
+                .help("Export the complete timeline")
+
+                Button(action: document.revealLastExport) {
+                    Label("Reveal Export", systemImage: "magnifyingglass")
+                }
+                .disabled(!document.canRevealExport)
+                .help("Reveal the last export in Finder")
             }
         }
         .onExitCommand(perform: document.cancelTrimPreview)
