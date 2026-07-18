@@ -255,6 +255,74 @@ public actor ProjectCacheStore {
         )
     }
 
+    /// Copies a generated artifact into the managed cache without loading the
+    /// complete file into memory. The manifest remains the atomic commit point.
+    @discardableResult
+    public func storeFile(
+        at sourceURL: URL,
+        projectID: ProjectState.ID,
+        identity: CacheEntryIdentity,
+        fileExtension: String
+    ) throws -> CacheArtifact {
+        let normalizedExtension = try Self.normalizedFileExtension(fileExtension)
+        let key = try keyBuilder.key(for: identity)
+        let entryURL = entryURL(projectID: projectID, identity: identity, key: key)
+        try createDirectory(entryURL)
+
+        let artifactFilename = "artifact-\(UUID().uuidString).\(normalizedExtension)"
+        let artifactURL = entryURL.appendingPathComponent(artifactFilename)
+        let manifestURL = entryURL.appendingPathComponent("manifest.json")
+
+        do {
+            try fileManager.copyItem(at: sourceURL, to: artifactURL)
+        } catch {
+            throw ProjectCacheError.writeFailed(
+                path: artifactURL.path,
+                reason: error.localizedDescription
+            )
+        }
+
+        do {
+            let attributes = try fileManager.attributesOfItem(atPath: artifactURL.path)
+            let byteCount = (attributes[.size] as? NSNumber)?.int64Value ?? -1
+            guard byteCount >= 0 else {
+                throw ProjectCacheError.writeFailed(
+                    path: artifactURL.path,
+                    reason: "The copied artifact size is unavailable."
+                )
+            }
+            let manifest = CacheManifest(
+                key: key,
+                identity: identity,
+                artifactFilename: artifactFilename,
+                artifactByteCount: byteCount
+            )
+            let manifestData: Data
+            do {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                manifestData = try encoder.encode(manifest)
+            } catch {
+                throw ProjectCacheError.manifestEncodingFailed(error.localizedDescription)
+            }
+            try writer.write(manifestData, atomicallyTo: manifestURL)
+            removeSupersededArtifacts(in: entryURL, keeping: artifactFilename)
+            return CacheArtifact(
+                key: key,
+                url: artifactURL,
+                byteCount: byteCount,
+                manifest: manifest
+            )
+        } catch {
+            try? fileManager.removeItem(at: artifactURL)
+            if let cacheError = error as? ProjectCacheError { throw cacheError }
+            throw ProjectCacheError.writeFailed(
+                path: entryURL.path,
+                reason: error.localizedDescription
+            )
+        }
+    }
+
     public func lookup(
         projectID: ProjectState.ID,
         identity: CacheEntryIdentity

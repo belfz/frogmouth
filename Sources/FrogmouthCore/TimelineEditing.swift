@@ -15,6 +15,10 @@ public enum TimelineEditError: LocalizedError, Equatable, Sendable {
     case trimTransactionAlreadyActive
     case noActiveTrimTransaction
     case commandDuringTrimTransaction
+    case duplicateStabilizationEffectID(UUID)
+    case unsupportedStabilizationMode(UUID)
+    case invalidStabilizationCoverage(UUID)
+    case nonNestedStabilizationCoverage(parent: UUID, child: UUID)
     case timing(MediaTimeError)
 
     public var errorDescription: String? {
@@ -47,6 +51,14 @@ public enum TimelineEditError: LocalizedError, Equatable, Sendable {
             "There is no trim gesture to update or commit."
         case .commandDuringTrimTransaction:
             "Finish or cancel the active trim before another project edit."
+        case let .duplicateStabilizationEffectID(id):
+            "Stabilization pass \(id.uuidString) appears more than once."
+        case let .unsupportedStabilizationMode(id):
+            "Stabilization pass \(id.uuidString) has no supported processing mode."
+        case let .invalidStabilizationCoverage(id):
+            "Stabilization pass \(id.uuidString) does not cover a valid range for this clip."
+        case let .nonNestedStabilizationCoverage(parent, child):
+            "Stabilization pass \(child.uuidString) extends outside preceding pass \(parent.uuidString)."
         case let .timing(error):
             "The edit has invalid or overflowing media timing: \(String(describing: error))."
         }
@@ -162,6 +174,7 @@ public enum ProjectCommand: Equatable, Sendable {
     case duplicateClip(clipID: TimelineClip.ID, newClipID: TimelineClip.ID)
     case moveClip(clipID: TimelineClip.ID, toIndex: Int)
     case deleteClip(clipID: TimelineClip.ID)
+    case setStabilizationPasses(clipID: TimelineClip.ID, passes: [StabilizationEffect])
 
     fileprivate func apply(to project: inout ProjectState) throws {
         switch self {
@@ -296,6 +309,43 @@ public enum ProjectCommand: Equatable, Sendable {
                 throw TimelineEditError.clipNotFound(clipID)
             }
             project.clips.remove(at: clipIndex)
+
+        case let .setStabilizationPasses(clipID, passes):
+            guard let clipIndex = project.clips.firstIndex(where: { $0.id == clipID }) else {
+                throw TimelineEditError.clipNotFound(clipID)
+            }
+            let clip = project.clips[clipIndex]
+            guard let asset = project.mediaLibrary.first(where: { $0.id == clip.assetID }) else {
+                throw TimelineEditError.mediaNotFound(clip.assetID)
+            }
+            var seen: Set<StabilizationEffect.ID> = []
+            var previous: StabilizationEffect?
+            for effect in passes {
+                guard seen.insert(effect.id).inserted else {
+                    throw TimelineEditError.duplicateStabilizationEffectID(effect.id)
+                }
+                guard effect.mode != .none,
+                      StabilizationProfile.profile(for: effect.mode) != nil else {
+                    throw TimelineEditError.unsupportedStabilizationMode(effect.id)
+                }
+                guard effect.processingRevision > 0,
+                      Self.contains(effect.analysisCoverage, clip.sourceRange),
+                      (try? TimelineIndex.validateSourceRange(
+                        effect.analysisCoverage,
+                        for: asset
+                      )) != nil else {
+                    throw TimelineEditError.invalidStabilizationCoverage(effect.id)
+                }
+                if let previous,
+                   !Self.contains(previous.analysisCoverage, effect.analysisCoverage) {
+                    throw TimelineEditError.nonNestedStabilizationCoverage(
+                        parent: previous.id,
+                        child: effect.id
+                    )
+                }
+                previous = effect
+            }
+            project.clips[clipIndex].stabilizationPasses = passes
         }
 
         _ = try TimelineIndex(project: project)
@@ -325,6 +375,12 @@ public enum ProjectCommand: Equatable, Sendable {
                 audioChannelCount: asset.inspected.audioChannelCount ?? 2
             )
         }
+    }
+
+    private static func contains(_ parent: MediaTimeRange, _ child: MediaTimeRange) -> Bool {
+        guard let parentEnd = try? parent.end(),
+              let childEnd = try? child.end() else { return false }
+        return child.start >= parent.start && childEnd <= parentEnd
     }
 }
 

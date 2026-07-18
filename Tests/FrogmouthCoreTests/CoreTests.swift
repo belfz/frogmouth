@@ -224,7 +224,7 @@ import Testing
     #expect(info.audioCodec == "aac")
 }
 
-@Test func installedFFmpegCanAnalyzeAndRenderAStabilizedProxy() async throws {
+@Test func installedFFmpegCanAnalyzeAndRenderAClipScopedAudioLinkedProxy() async throws {
     let sample = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         .appendingPathComponent("EOS R5 example video.MP4")
     guard FileManager.default.fileExists(atPath: sample.path),
@@ -239,32 +239,43 @@ import Testing
 
     // Natural motion uses a 17-frame smoothing window, so a one-second/24-frame
     // slice is long enough to exercise both vid.stab passes without slowing the suite excessively.
-    let info = try await MediaInspector().inspect(url: sample)
-    let profile = try #require(StabilizationProfile.profile(for: .naturalMotion))
-    let trim = TrimRange(start: 0, end: 1)
+    let range = try MediaTimeRange(
+        start: .zero,
+        duration: MediaTime(value: 1, timescale: 1)
+    )
+    let effect = StabilizationEffect(
+        mode: .naturalMotion,
+        analysisCoverage: range,
+        processingRevision: StabilizationCacheIdentityBuilder.currentProcessingRevision
+    )
+    let clip = TimelineClip(
+        assetID: UUID(),
+        sourceRange: range,
+        stabilizationPasses: [effect]
+    )
     let diagnostics = DiagnosticLogStore(baseDirectory: workspace.directory)
     let runner = FFmpegRunner(diagnostics: diagnostics)
 
     _ = try await runner.run(
         executable: installation.executableURL,
-        arguments: FFmpegCommandFactory.analysis(
+        arguments: try ClipStabilizationCommandFactory.analysis(
             input: sample,
-            sourceDuration: info.duration,
-            operations: [.trim(trim)],
-            transforms: workspace.transformsURL,
-            profile: profile
+            clip: clip,
+            effectIndex: 0,
+            precedingTransforms: [:],
+            outputTransforms: workspace.transformsURL
         ),
-        duration: trim.duration,
+        duration: 1,
         sessionID: "integration-test",
         phase: "analysis"
     ) { _ in }
     #expect(FileManager.default.fileExists(atPath: workspace.transformsURL.path))
 
-    let pass = StabilizationPass(mode: .naturalMotion, transformsURL: workspace.transformsURL)
-    var previewArguments = FFmpegCommandFactory.preview(
+    var previewArguments = try ClipStabilizationCommandFactory.preview(
         input: sample,
-        sourceDuration: info.duration,
-        operations: [.trim(trim), .stabilization(pass)],
+        clip: clip,
+        effectIndex: 0,
+        transforms: [effect.id: workspace.transformsURL],
         output: workspace.previewURL
     )
     // VideoToolbox is denied inside the Codex command sandbox. The shipping
@@ -275,7 +286,7 @@ import Testing
     _ = try await runner.run(
         executable: installation.executableURL,
         arguments: previewArguments,
-        duration: trim.duration,
+        duration: 1,
         sessionID: "integration-test",
         phase: "preview"
     ) { _ in }

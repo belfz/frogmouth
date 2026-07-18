@@ -15,8 +15,11 @@ struct RootView: View {
                     .controlSize(.large)
             case let .unavailable(message):
                 FFmpegSetupView(message: message)
-            case .ready:
+            case let .ready(installation):
                 ProjectRootView(document: document)
+                    .task(id: installation.stabilizationCacheToolRevision) {
+                        document.configureFFmpegInstallation(installation)
+                    }
             }
         }
         .navigationTitle(document.displayName)
@@ -125,7 +128,28 @@ private struct ProjectRootView: View {
                 ProjectStartupView(document: document)
             }
 
-            if document.isBusy {
+            if document.stabilizationProcessingPhase != .idle {
+                Color.black.opacity(0.22).ignoresSafeArea()
+                VStack(spacing: 14) {
+                    if let progress = document.stabilizationProcessingPhase.progress {
+                        ProgressView(
+                            document.stabilizationProcessingPhase.title,
+                            value: progress,
+                            total: 1
+                        )
+                        .frame(width: 280)
+                    } else {
+                        ProgressView(document.stabilizationProcessingPhase.title)
+                            .controlSize(.large)
+                    }
+                    Button("Cancel", role: .cancel) {
+                        document.cancelStabilizationProcessing()
+                    }
+                }
+                .padding(28)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .shadow(radius: 18)
+            } else if document.isBusy {
                 Color.black.opacity(0.15).ignoresSafeArea()
                 ProgressView(activityTitle)
                     .controlSize(.large)

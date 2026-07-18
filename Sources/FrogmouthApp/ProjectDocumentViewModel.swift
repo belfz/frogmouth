@@ -32,6 +32,8 @@ final class ProjectDocumentViewModel: ObservableObject {
     @Published private(set) var playheadFrame: Int64 = 0
     @Published private(set) var playbackLocation: PlaybackLocation?
     @Published private(set) var trimPreview: TrimPreview?
+    @Published private(set) var stabilizationStatuses: [TimelineClip.ID: StabilizationStatus] = [:]
+    @Published private(set) var stabilizationProcessingPhase: ProcessingPhase = .idle
     @Published var errorMessage: String?
     @Published var isUnsavedConfirmationPresented = false
 
@@ -45,23 +47,39 @@ final class ProjectDocumentViewModel: ObservableObject {
     private let store: ProjectDocumentStore
     private let factsInspector: any ProjectMediaFactsInspecting
     private let fingerprinter: any MediaFingerprinting
+    private let stabilizationStatusResolver: StabilizationStatusResolver
+    private let stabilizationProcessor: ClipStabilizationProcessor
     let thumbnailService: ThumbnailService
     let playback: PlaybackCoordinator
     private var session: ProjectDocumentSession?
     private var pendingTransition: PendingTransition?
     private var autosaveStatusTask: Task<Void, Never>?
+    private var stabilizationStatusTask: Task<Void, Never>?
+    private var stabilizationProcessingTask: Task<Void, Never>?
+    private var stabilizationProcessingGeneration = UUID()
+    private var stabilizationValidations: [TimelineClip.ID: StabilizationValidation] = [:]
+    private var ffmpegInstallation: FFmpegInstallation?
     private var windowCloseCompletion: (() -> Void)?
 
     init(
         store: ProjectDocumentStore = ProjectDocumentStore(),
         factsInspector: any ProjectMediaFactsInspecting = AVProjectMediaFactsInspector(),
         fingerprinter: any MediaFingerprinting = MediaFingerprinter(),
+        stabilizationStatusResolver: StabilizationStatusResolver = StabilizationStatusResolver(),
         thumbnailService: ThumbnailService = ThumbnailService(),
-        playback: PlaybackCoordinator = PlaybackCoordinator()
+        playback: PlaybackCoordinator = PlaybackCoordinator(),
+        diagnostics: DiagnosticLogStore = DiagnosticLogStore(),
+        stabilizationProcessor: ClipStabilizationProcessor? = nil
     ) {
         self.store = store
         self.factsInspector = factsInspector
         self.fingerprinter = fingerprinter
+        self.stabilizationStatusResolver = stabilizationStatusResolver
+        self.stabilizationProcessor = stabilizationProcessor ?? ClipStabilizationProcessor(
+            cacheStore: stabilizationStatusResolver.cacheStore,
+            identityBuilder: stabilizationStatusResolver.identityBuilder,
+            runner: FFmpegRunner(diagnostics: diagnostics)
+        )
         self.thumbnailService = thumbnailService
         self.playback = playback
         playback.playheadDidChange = { [weak self] frame, location in
@@ -85,6 +103,36 @@ final class ProjectDocumentViewModel: ObservableObject {
         return playheadFrame > entry.startFrame
             && playheadFrame < entry.startFrame + entry.durationFrames
     }
+    var canExportTimeline: Bool {
+        guard !isBusy,
+              let project,
+              !project.clips.isEmpty,
+              (try? TimelineIndex(project: project)) != nil else { return false }
+        return project.clips.allSatisfy {
+            !stabilizationStatus(for: $0, in: project).blocksExport
+        }
+    }
+    var canApplySelectedStabilization: Bool {
+        guard canEditSelectedClip,
+              ffmpegInstallation != nil,
+              let project,
+              let selectedClipID,
+              let clip = project.clips.first(where: { $0.id == selectedClipID }) else { return false }
+        if case .stale = stabilizationStatus(for: clip, in: project) { return false }
+        return true
+    }
+    var canUpdateSelectedStabilization: Bool {
+        guard canEditSelectedClip,
+              ffmpegInstallation != nil,
+              let project,
+              let selectedClipID,
+              let clip = project.clips.first(where: { $0.id == selectedClipID }) else { return false }
+        return switch stabilizationStatus(for: clip, in: project) {
+        case .stale(.validationPending): false
+        case .stale: true
+        case .none, .valid: false
+        }
+    }
     var presentationProject: ProjectState? {
         guard var project else { return nil }
         if let trimPreview,
@@ -96,6 +144,60 @@ final class ProjectDocumentViewModel: ObservableObject {
     var displayName: String {
         guard let project else { return "frogmouth" }
         return hasUnsavedChanges ? "\(project.name) — Edited" : project.name
+    }
+
+    func configureFFmpegInstallation(_ installation: FFmpegInstallation) {
+        guard ffmpegInstallation != installation else { return }
+        ffmpegInstallation = installation
+        scheduleStabilizationStatusRefresh()
+    }
+
+    func stabilizationStatus(
+        for clip: TimelineClip,
+        in project: ProjectState
+    ) -> StabilizationStatus {
+        guard !clip.stabilizationPasses.isEmpty else { return .none }
+        let asset = project.mediaLibrary.first { $0.id == clip.assetID }
+        if let coverageStatus = StabilizationStatusResolver.coverageStatus(
+            for: clip,
+            asset: asset
+        ) {
+            return coverageStatus
+        }
+        guard ffmpegInstallation != nil else {
+            return .stale(.validationPending)
+        }
+        return stabilizationStatuses[clip.id] ?? .stale(.validationPending)
+    }
+
+    func applyStabilization(_ mode: StabilizationMode) {
+        guard mode != .none,
+              canApplySelectedStabilization,
+              let project,
+              let selectedClipID,
+              let clip = project.clips.first(where: { $0.id == selectedClipID }) else { return }
+        guard let passes = StabilizationPassPlanner.appending(mode: mode, to: clip) else { return }
+        startStabilizationProcessing(clipID: clip.id, passes: passes)
+    }
+
+    func updateSelectedStabilization() {
+        guard canUpdateSelectedStabilization,
+              let project,
+              let selectedClipID,
+              let clip = project.clips.first(where: { $0.id == selectedClipID }) else { return }
+        let passes: [StabilizationEffect]
+        do {
+            passes = try StabilizationPassPlanner.updating(clip)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        startStabilizationProcessing(clipID: clip.id, passes: passes)
+    }
+
+    func cancelStabilizationProcessing() {
+        stabilizationProcessingTask?.cancel()
+        stabilizationProcessor.cancel()
     }
 
     func requestNewProject() {
@@ -450,7 +552,77 @@ final class ProjectDocumentViewModel: ObservableObject {
 
     func shutdown() {
         autosaveStatusTask?.cancel()
+        stabilizationStatusTask?.cancel()
+        stabilizationProcessingTask?.cancel()
+        stabilizationProcessor.cancel()
         playback.shutdown()
+    }
+
+    private func startStabilizationProcessing(
+        clipID: TimelineClip.ID,
+        passes: [StabilizationEffect]
+    ) {
+        guard stabilizationProcessingTask == nil,
+              let project,
+              let session,
+              let installation = ffmpegInstallation else { return }
+        isBusy = true
+        stabilizationProcessingPhase = .analyzing(progress: 0)
+        stabilizationProcessingGeneration = UUID()
+        let generation = stabilizationProcessingGeneration
+        let processor = stabilizationProcessor
+        let sourceURLs = resolvedMediaURLs
+
+        stabilizationProcessingTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.stabilizationProcessingGeneration == generation {
+                    self.stabilizationProcessingTask = nil
+                    self.stabilizationProcessingPhase = .idle
+                    self.isBusy = false
+                }
+            }
+            do {
+                let result = try await processor.process(
+                    project: project,
+                    clipID: clipID,
+                    passes: passes,
+                    sourceURLs: sourceURLs,
+                    installation: installation
+                ) { [weak self] update in
+                    Task { @MainActor [weak self] in
+                        guard let self,
+                              self.stabilizationProcessingGeneration == generation,
+                              self.stabilizationProcessingTask != nil else { return }
+                        switch update.phase {
+                        case .analyzing:
+                            self.stabilizationProcessingPhase = .analyzing(
+                                progress: update.fraction
+                            )
+                        case .renderingPreview:
+                            self.stabilizationProcessingPhase = .renderingPreview(
+                                progress: update.fraction
+                            )
+                        }
+                    }
+                }
+                try Task.checkCancellation()
+                guard self.project == project else { throw CancellationError() }
+                try await session.apply(.setStabilizationPasses(
+                    clipID: clipID,
+                    passes: result.passes
+                ))
+                await self.refreshPublishedState()
+                self.scheduleAutosaveStatusRefresh()
+            } catch is CancellationError {
+                // Cancellation deliberately leaves the project decision unchanged.
+            } catch FrogmouthError.cancelled {
+                // FFmpeg cancellation is an expected user action.
+            } catch {
+                self.errorMessage = error.localizedDescription
+                await self.refreshPublishedState()
+            }
+        }
     }
 
     private func request(_ transition: PendingTransition) {
@@ -650,7 +822,10 @@ final class ProjectDocumentViewModel: ObservableObject {
 
     private func install(_ session: ProjectDocumentSession?) {
         autosaveStatusTask?.cancel()
+        stabilizationStatusTask?.cancel()
         trimPreview = nil
+        stabilizationStatuses = [:]
+        stabilizationValidations = [:]
         self.session = session
     }
 
@@ -658,6 +833,7 @@ final class ProjectDocumentViewModel: ObservableObject {
         let previousProject = project
         let previousMediaURLs = resolvedMediaURLs
         guard let session else {
+            stabilizationStatusTask?.cancel()
             project = nil
             fileURL = nil
             resolvedMediaURLs = [:]
@@ -666,6 +842,8 @@ final class ProjectDocumentViewModel: ObservableObject {
             canRedo = false
             playheadFrame = 0
             playbackLocation = nil
+            stabilizationStatuses = [:]
+            stabilizationValidations = [:]
             playback.rebuild(project: nil, mediaURLs: [:], preservingFrame: 0)
             return
         }
@@ -682,11 +860,15 @@ final class ProjectDocumentViewModel: ObservableObject {
             playheadFrame = 0
         }
         if project != previousProject || resolvedMediaURLs != previousMediaURLs {
+            stabilizationValidations = [:]
             playback.rebuild(
                 project: project,
                 mediaURLs: resolvedMediaURLs,
                 preservingFrame: playheadFrame
             )
+        }
+        if project != previousProject {
+            scheduleStabilizationStatusRefresh()
         }
     }
 
@@ -731,6 +913,63 @@ final class ProjectDocumentViewModel: ObservableObject {
         }
     }
 
+    private func scheduleStabilizationStatusRefresh() {
+        stabilizationStatusTask?.cancel()
+        guard let project else {
+            stabilizationStatuses = [:]
+            stabilizationValidations = [:]
+            return
+        }
+
+        stabilizationStatuses = Dictionary(uniqueKeysWithValues: project.clips.map { clip in
+            let status: StabilizationStatus = clip.stabilizationPasses.isEmpty
+                ? .none
+                : .stale(.validationPending)
+            return (clip.id, status)
+        })
+        stabilizationValidations = [:]
+        guard let toolRevision = ffmpegInstallation?.stabilizationCacheToolRevision else { return }
+
+        let resolver = stabilizationStatusResolver
+        stabilizationStatusTask = Task { [weak self] in
+            var validations: [TimelineClip.ID: StabilizationValidation] = [:]
+            for clip in project.clips {
+                guard !Task.isCancelled else { return }
+                validations[clip.id] = await resolver.validation(
+                    for: clip,
+                    in: project,
+                    toolRevision: toolRevision
+                )
+            }
+            guard !Task.isCancelled,
+                  let self,
+                  self.project == project,
+                  self.ffmpegInstallation?.stabilizationCacheToolRevision == toolRevision else { return }
+            self.stabilizationValidations = validations
+            self.stabilizationStatuses = validations.mapValues(\.status)
+            self.rebuildPlaybackWithValidatedStabilization()
+        }
+    }
+
+    private func rebuildPlaybackWithValidatedStabilization() {
+        guard let project else { return }
+        var overrides: [TimelineClip.ID: PlaybackMediaSource] = [:]
+        for clip in project.clips {
+            guard let validation = stabilizationValidations[clip.id],
+                  let source = StabilizedPlaybackSourceBuilder.source(
+                    for: clip,
+                    validation: validation
+                  ) else { continue }
+            overrides[clip.id] = source
+        }
+        playback.rebuild(
+            project: project,
+            mediaURLs: resolvedMediaURLs,
+            clipSourceOverrides: overrides,
+            preservingFrame: playheadFrame
+        )
+    }
+
     private static func isMovieURL(_ url: URL) -> Bool {
         guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
         return type.conforms(to: .movie)
@@ -741,6 +980,7 @@ final class ProjectDocumentViewModel: ObservableObject {
         let components = name.components(separatedBy: invalid).filter { !$0.isEmpty }
         return components.joined(separator: "-").isEmpty ? "Untitled" : components.joined(separator: "-")
     }
+
 }
 
 private extension UTType {

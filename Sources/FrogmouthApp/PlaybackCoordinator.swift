@@ -33,6 +33,7 @@ final class PlaybackCoordinator: ObservableObject {
     func rebuild(
         project: ProjectState?,
         mediaURLs: [MediaAsset.ID: URL],
+        clipSourceOverrides: [TimelineClip.ID: PlaybackMediaSource] = [:],
         preservingFrame: Int64
     ) {
         buildTask?.cancel()
@@ -57,7 +58,11 @@ final class PlaybackCoordinator: ObservableObject {
         player.pause()
         isPlaying = false
         isBuilding = true
-        let request = PlaybackBuildRequest(project: project, mediaURLs: mediaURLs)
+        let request = PlaybackBuildRequest(
+            project: project,
+            mediaURLs: mediaURLs,
+            clipSourceOverrides: clipSourceOverrides
+        )
 
         buildTask = Task { [weak self] in
             do {

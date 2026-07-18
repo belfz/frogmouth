@@ -316,12 +316,12 @@ Acceptance:
 
 Dependencies: T01, T06, T09.
 
-- [ ] Persist pass mode/order, analysis coverage, and processing revision but not cache URLs.
-- [ ] Derive `none`, `valid`, and `stale(reason:)` from project plus cache state.
-- [ ] Preserve complete pass stacks on split and duplicate.
-- [ ] Keep inward trims/reorder valid; mark outward extensions stale.
-- [ ] Mark missing/purged/incompatible artifacts stale.
-- [ ] Block export whenever a timeline-used clip is stale.
+- [x] Persist pass mode/order, analysis coverage, and processing revision but not cache URLs.
+- [x] Derive `none`, `valid`, and `stale(reason:)` from project plus cache state.
+- [x] Preserve complete pass stacks on split and duplicate.
+- [x] Keep inward trims/reorder valid; mark outward extensions stale.
+- [x] Mark missing/purged/incompatible artifacts stale.
+- [x] Block export whenever a timeline-used clip is stale.
 
 Acceptance:
 
@@ -333,13 +333,13 @@ Acceptance:
 
 Dependencies: T15, T16.
 
-- [ ] Analyze only the selected clip's current valid pipeline.
-- [ ] Preserve multiple ordered passes.
-- [ ] Store transforms and the 1024-pixel preview proxy in persistent project cache.
-- [ ] Implement explicit **Update Stabilization** for stale clips.
-- [ ] Keep the progress modal blocking and cancellable.
-- [ ] Preview stale clips from source and valid clips from the correctly mapped proxy range.
-- [ ] Reuse valid caches after reopen and undo/redo.
+- [x] Analyze only the selected clip's current valid pipeline.
+- [x] Preserve multiple ordered passes.
+- [x] Store transforms and the 1024-pixel preview proxy in persistent project cache.
+- [x] Implement explicit **Update Stabilization** for stale clips.
+- [x] Keep the progress modal blocking and cancellable.
+- [x] Preview stale clips from source and valid clips from the correctly mapped proxy range.
+- [x] Reuse valid caches after reopen and undo/redo.
 
 Acceptance:
 

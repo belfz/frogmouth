@@ -137,6 +137,47 @@ import Testing
     ].sorted())
 }
 
+@Test func fileBackedCacheStoreCopiesGeneratedMediaAndCommitsItAtomically() async throws {
+    let root = try makeCacheTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let source = root.appendingPathComponent("generated preview.mp4")
+    let bytes = Data(repeating: 0x5A, count: 128 * 1_024)
+    try bytes.write(to: source)
+    let store = ProjectCacheStore(rootURL: root.appendingPathComponent("cache"))
+    let projectID = UUID(uuidString: "AAAAAAAA-9150-0000-0000-000000000001")!
+    let identity = makeCacheIdentity()
+
+    let artifact = try await store.storeFile(
+        at: source,
+        projectID: projectID,
+        identity: identity,
+        fileExtension: "mp4"
+    )
+    #expect(artifact.byteCount == Int64(bytes.count))
+    #expect(artifact.url != source)
+    #expect(try Data(contentsOf: artifact.url) == bytes)
+    #expect(await store.lookup(projectID: projectID, identity: identity) == .hit(artifact))
+
+    let replacement = root.appendingPathComponent("replacement.mp4")
+    try Data("replacement".utf8).write(to: replacement)
+    let interrupted = ProjectCacheStore(
+        rootURL: root.appendingPathComponent("cache"),
+        writer: FailOnNthProjectWriter(failingCall: 1)
+    )
+    do {
+        _ = try await interrupted.storeFile(
+            at: replacement,
+            projectID: projectID,
+            identity: identity,
+            fileExtension: "mp4"
+        )
+        Issue.record("Expected the file-backed manifest commit to fail")
+    } catch is ProjectCacheError {
+        // Expected: the prior manifest continues to reference the valid artifact.
+    }
+    #expect(await store.lookup(projectID: projectID, identity: identity) == .hit(artifact))
+}
+
 @Test func projectAndGlobalCacheClearsNeverTouchDocumentsOrSourceMedia() async throws {
     let root = try makeCacheTemporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }

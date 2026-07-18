@@ -400,7 +400,38 @@ private struct ProjectInspectorView: View {
                     ?? formatDuration(location.sourceTime)
             )
         }
-        InspectorValue(label: "Stabilization passes", value: "\(clip.stabilizationPasses.count)")
+        let stabilizationStatus = document.stabilizationStatus(for: clip, in: project)
+        InspectorValue(label: "Stabilization", value: stabilizationStatus.title)
+        if case let .stale(reason) = stabilizationStatus {
+            Text(reason.localizedDescription)
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .textSelection(.enabled)
+        }
+        Divider()
+        if case .stale = stabilizationStatus {
+            Button(action: document.updateSelectedStabilization) {
+                Label("Update Stabilization", systemImage: "arrow.clockwise")
+                    .frame(maxWidth: .infinity)
+            }
+            .disabled(!document.canUpdateSelectedStabilization)
+        } else {
+            VStack(spacing: 8) {
+                Button {
+                    document.applyStabilization(.steady)
+                } label: {
+                    Label("Apply Steady", systemImage: "scope")
+                        .frame(maxWidth: .infinity)
+                }
+                Button {
+                    document.applyStabilization(.naturalMotion)
+                } label: {
+                    Label("Apply Natural Motion", systemImage: "waveform.path")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .disabled(!document.canApplySelectedStabilization)
+        }
         Text("Audio remains linked to this clip.")
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -428,6 +459,16 @@ private struct ProjectInspectorView: View {
                 .font(.title3.bold())
             InspectorValue(label: "Sources", value: "\(project.mediaLibrary.count)")
             InspectorValue(label: "Clips", value: "\(project.clips.count)")
+        }
+    }
+}
+
+private extension StabilizationStatus {
+    var title: String {
+        switch self {
+        case .none: "Not stabilized"
+        case .valid: "Current"
+        case .stale: "Needs update"
         }
     }
 }

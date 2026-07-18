@@ -233,7 +233,11 @@ private struct TimelineTrackContent: View {
                             timelineRate: project.timelineFormat?.frameRate,
                             pixelsPerSecond: pixelsPerSecond,
                             requestsThumbnail: intersectsPrefetch(startX: startX, width: width),
-                            isSelected: document.selectedClipID == clip.id
+                            isSelected: document.selectedClipID == clip.id,
+                            stabilizationStatus: document.stabilizationStatus(
+                                for: clip,
+                                in: project
+                            )
                         )
                         .position(
                             x: startX + width / 2,
@@ -425,12 +429,6 @@ private struct TimelineRuler: View {
     }
 }
 
-private enum TimelineStabilizationVisualState {
-    case none
-    case valid
-    case stale(String)
-}
-
 private struct TimelinePresentationClip: View {
     @ObservedObject var document: ProjectDocumentViewModel
     let projectID: ProjectState.ID
@@ -441,6 +439,7 @@ private struct TimelinePresentationClip: View {
     let pixelsPerSecond: Double
     let requestsThumbnail: Bool
     let isSelected: Bool
+    let stabilizationStatus: StabilizationStatus
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -494,7 +493,7 @@ private struct TimelinePresentationClip: View {
 
     @ViewBuilder
     private var stabilizationBadge: some View {
-        switch stabilizationState {
+        switch stabilizationStatus {
         case .none:
             EmptyView()
         case .valid:
@@ -505,16 +504,10 @@ private struct TimelinePresentationClip: View {
         case let .stale(reason):
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-                .help(reason)
+                .help(reason.localizedDescription)
                 .accessibilityLabel("Stabilization stale")
-                .accessibilityHint(reason)
+                .accessibilityHint(reason.localizedDescription)
         }
-    }
-
-    private var stabilizationState: TimelineStabilizationVisualState {
-        clip.stabilizationPasses.isEmpty
-            ? .none
-            : .stale("Stabilization cache validation is pending; update stabilization before export.")
     }
 
     private var filename: String {
