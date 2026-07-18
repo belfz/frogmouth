@@ -235,7 +235,6 @@ private struct TimelineTrackContent: View {
                             requestsThumbnail: intersectsPrefetch(startX: startX, width: width),
                             isSelected: document.selectedClipID == clip.id
                         )
-                        .frame(width: width, height: clipHeight)
                         .position(
                             x: startX + width / 2,
                             y: rulerHeight + 2 + clipHeight / 2
@@ -470,6 +469,7 @@ private struct TimelinePresentationClip: View {
             }
             .padding(5)
         }
+        .frame(width: width, height: 80)
         .background(Color.black.opacity(0.75))
         .clipShape(RoundedRectangle(cornerRadius: 5))
         .overlay {
