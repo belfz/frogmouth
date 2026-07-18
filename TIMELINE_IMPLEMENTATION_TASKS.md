@@ -356,14 +356,14 @@ Dependencies: T01, T02, T03, T06, T07, T16.
 
 Suggested types: `ClipRenderPlan`, `TimelineRenderPlan`, `TimelineFFmpegCommandFactory`.
 
-- [ ] Map unique source assets to FFmpeg inputs.
-- [ ] Build per-clip video branches for exact range, stabilization, timestamp reset, fps, scale, pad, sample aspect ratio, and pixel format.
-- [ ] Build linked audio branches with trim, timestamp reset, resampling, and channel normalization.
-- [ ] Preserve continuous audio across contiguous split children.
-- [ ] Add 5–10 ms non-overlapping anti-click fades at unrelated/non-contiguous boundaries.
-- [ ] Synthesize silence for isolated silent clips when the timeline otherwise has audio.
-- [ ] Concatenate normalized branches in timeline order.
-- [ ] Calculate conservative timeline bitrate and export progress duration.
+- [x] Map unique source assets to FFmpeg inputs.
+- [x] Build per-clip video branches for exact range, stabilization, timestamp reset, fps, scale, pad, sample aspect ratio, and pixel format.
+- [x] Build linked audio branches with trim, timestamp reset, resampling, and channel normalization.
+- [x] Preserve continuous audio across contiguous split children.
+- [x] Add 5–10 ms non-overlapping anti-click fades at unrelated/non-contiguous boundaries.
+- [x] Synthesize silence for isolated silent clips when the timeline otherwise has audio.
+- [x] Concatenate normalized branches in timeline order.
+- [x] Calculate conservative timeline bitrate and export progress duration.
 
 Acceptance:
 
