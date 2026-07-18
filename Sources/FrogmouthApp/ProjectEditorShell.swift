@@ -56,7 +56,7 @@ struct ProjectEditorShell: View {
                     Label("Split Clip", systemImage: "scissors")
                 }
                 .disabled(!document.canSplitSelectedClip)
-                .help("Split the selected clip at the playhead")
+                .help("Split the selected clip at the playhead (C)")
 
                 Button(action: document.duplicateSelectedClip) {
                     Label("Duplicate Clip", systemImage: "plus.square.on.square")
@@ -67,6 +67,7 @@ struct ProjectEditorShell: View {
                     Label("Delete Clip", systemImage: "trash")
                 }
                 .disabled(!document.canEditSelectedClip)
+                .help("Delete the selected clip (Backspace)")
 
                 Button {
                     showsInspector.toggle()
@@ -93,7 +94,125 @@ struct ProjectEditorShell: View {
                 .help("Reveal the last export in Finder")
             }
         }
+        .background {
+            EditorKeyboardShortcutMonitor(
+                canSplit: document.canSplitSelectedClip,
+                canDelete: document.canEditSelectedClip,
+                split: document.splitSelectedClip,
+                delete: document.deleteSelectedClip
+            )
+            .frame(width: 0, height: 0)
+        }
         .onExitCommand(perform: document.cancelTrimPreview)
+    }
+}
+
+private struct EditorKeyboardShortcutMonitor: NSViewRepresentable {
+    let canSplit: Bool
+    let canDelete: Bool
+    let split: () -> Void
+    let delete: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            canSplit: canSplit,
+            canDelete: canDelete,
+            split: split,
+            delete: delete
+        )
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.install(for: view)
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.update(
+            canSplit: canSplit,
+            canDelete: canDelete,
+            split: split,
+            delete: delete
+        )
+    }
+
+    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) {
+        coordinator.uninstall()
+    }
+
+    @MainActor
+    final class Coordinator {
+        private var canSplit: Bool
+        private var canDelete: Bool
+        private var split: () -> Void
+        private var delete: () -> Void
+        private var eventMonitor: Any?
+
+        init(
+            canSplit: Bool,
+            canDelete: Bool,
+            split: @escaping () -> Void,
+            delete: @escaping () -> Void
+        ) {
+            self.canSplit = canSplit
+            self.canDelete = canDelete
+            self.split = split
+            self.delete = delete
+        }
+
+        func install(for view: NSView) {
+            guard eventMonitor == nil else { return }
+            eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+                [weak self, weak view] event in
+                guard let self,
+                      let view,
+                      event.window === view.window,
+                      !event.isARepeat,
+                      !Self.isTextInputActive(in: event.window) else {
+                    return event
+                }
+                let actionModifiers = event.modifierFlags.intersection([
+                    .command, .control, .option, .shift,
+                ])
+                guard actionModifiers.isEmpty else { return event }
+
+                if event.charactersIgnoringModifiers?.lowercased() == "c",
+                   self.canSplit {
+                    self.split()
+                    return nil
+                }
+                if [UInt16(51), UInt16(117)].contains(event.keyCode),
+                   self.canDelete {
+                    self.delete()
+                    return nil
+                }
+                return event
+            }
+        }
+
+        func update(
+            canSplit: Bool,
+            canDelete: Bool,
+            split: @escaping () -> Void,
+            delete: @escaping () -> Void
+        ) {
+            self.canSplit = canSplit
+            self.canDelete = canDelete
+            self.split = split
+            self.delete = delete
+        }
+
+        func uninstall() {
+            guard let eventMonitor else { return }
+            NSEvent.removeMonitor(eventMonitor)
+            self.eventMonitor = nil
+        }
+
+        private static func isTextInputActive(in window: NSWindow?) -> Bool {
+            guard let responder = window?.firstResponder else { return false }
+            return responder is NSTextView || responder is NSTextField
+        }
     }
 }
 

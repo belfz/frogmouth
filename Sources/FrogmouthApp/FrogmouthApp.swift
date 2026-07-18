@@ -56,11 +56,11 @@ struct FrogmouthApp: App {
                     .disabled(!document.canRedo || document.isBusy)
             }
             CommandMenu("Clip") {
-                Button("Split at Playhead", action: document.splitSelectedClip)
+                Button("Split at Playhead (C)", action: document.splitSelectedClip)
                     .disabled(!document.canSplitSelectedClip)
                 Button("Duplicate", action: document.duplicateSelectedClip)
                     .disabled(!document.canEditSelectedClip)
-                Button("Delete", role: .destructive, action: document.deleteSelectedClip)
+                Button("Delete (Backspace)", role: .destructive, action: document.deleteSelectedClip)
                     .disabled(!document.canEditSelectedClip)
             }
             CommandMenu("Diagnostics") {

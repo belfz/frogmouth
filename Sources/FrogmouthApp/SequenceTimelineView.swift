@@ -256,6 +256,7 @@ private struct TimelineTrackContent: View {
                 }
 
                 playhead(frameRate: project.timelineFormat?.frameRate)
+                    .zIndex(3)
             } else {
                 Text("Drag a Media Library source here")
                     .font(.callout)
