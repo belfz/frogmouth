@@ -37,6 +37,10 @@ public enum StabilizationStaleReason: LocalizedError, Equatable, Sendable {
     case duplicateEffectID(StabilizationEffect.ID)
     case unsupportedMode(effectID: StabilizationEffect.ID, mode: StabilizationMode)
     case invalidAnalysisCoverage(effectID: StabilizationEffect.ID)
+    case nonNestedAnalysisCoverage(
+        parent: StabilizationEffect.ID,
+        child: StabilizationEffect.ID
+    )
     case clipOutsideAnalysisCoverage(
         effectID: StabilizationEffect.ID,
         clipRange: MediaTimeRange,
@@ -65,6 +69,8 @@ public enum StabilizationStaleReason: LocalizedError, Equatable, Sendable {
             "Stabilization pass \(effectID.uuidString) uses unsupported mode \(mode.rawValue)."
         case let .invalidAnalysisCoverage(effectID):
             "Stabilization pass \(effectID.uuidString) has invalid analysis coverage."
+        case let .nonNestedAnalysisCoverage(parent, child):
+            "Stabilization pass \(child.uuidString) extends outside preceding pass \(parent.uuidString). Update stabilization."
         case let .clipOutsideAnalysisCoverage(effectID, _, _):
             "The clip extends outside the analyzed range for stabilization pass \(effectID.uuidString). Update stabilization before export."
         case let .processingRevisionChanged(effectID, analyzedWith, current):
@@ -240,6 +246,7 @@ public struct StabilizationStatusResolver: Sendable {
         }
 
         var artifacts: [StabilizationPassArtifacts] = []
+        var previousEffect: StabilizationEffect?
         for (index, effect) in clip.stabilizationPasses.enumerated() {
             guard effect.mode != .none,
                   StabilizationProfile.profile(for: effect.mode) != nil else {
@@ -260,6 +267,13 @@ public struct StabilizationStatusResolver: Sendable {
                     effectID: effect.id,
                     clipRange: clip.sourceRange,
                     analysisCoverage: effect.analysisCoverage
+                ))
+            }
+            if let previousEffect,
+               !Self.contains(previousEffect.analysisCoverage, effect.analysisCoverage) {
+                return stale(.nonNestedAnalysisCoverage(
+                    parent: previousEffect.id,
+                    child: effect.id
                 ))
             }
             guard let identities = identityBuilder.identities(
@@ -301,6 +315,7 @@ public struct StabilizationStatusResolver: Sendable {
                 transforms: transformArtifact,
                 preview: previewArtifact
             ))
+            previousEffect = effect
         }
         return StabilizationValidation(status: .valid, artifacts: artifacts)
     }
@@ -311,6 +326,7 @@ public struct StabilizationStatusResolver: Sendable {
     ) -> StabilizationStatus? {
         guard !clip.stabilizationPasses.isEmpty else { return StabilizationStatus.none }
         guard let asset else { return .stale(.mediaMissing(clip.assetID)) }
+        var previousEffect: StabilizationEffect?
         for effect in clip.stabilizationPasses {
             guard isValidCoverage(effect.analysisCoverage, for: asset) else {
                 return .stale(.invalidAnalysisCoverage(effectID: effect.id))
@@ -322,6 +338,14 @@ public struct StabilizationStatusResolver: Sendable {
                     analysisCoverage: effect.analysisCoverage
                 ))
             }
+            if let previousEffect,
+               !contains(previousEffect.analysisCoverage, effect.analysisCoverage) {
+                return .stale(.nonNestedAnalysisCoverage(
+                    parent: previousEffect.id,
+                    child: effect.id
+                ))
+            }
+            previousEffect = effect
         }
         return nil
     }

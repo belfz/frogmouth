@@ -3,8 +3,16 @@ import SwiftUI
 
 @main
 struct FrogmouthApp: App {
-    @StateObject private var model = EditorViewModel()
-    @StateObject private var document = ProjectDocumentViewModel()
+    @StateObject private var model: EditorViewModel
+    @StateObject private var document: ProjectDocumentViewModel
+
+    init() {
+        let diagnostics = DiagnosticLogStore()
+        _model = StateObject(wrappedValue: EditorViewModel(diagnostics: diagnostics))
+        _document = StateObject(wrappedValue: ProjectDocumentViewModel(
+            diagnostics: diagnostics
+        ))
+    }
 
     var body: some Scene {
         WindowGroup("frogmouth") {

@@ -236,6 +236,46 @@ private let clipCID = UUID(uuidString: "CCCCCCCC-0000-0000-0000-000000000003")!
     #expect(!(try editor.undo()))
 }
 
+@Test func replacingAStabilizationStackIsOneValidatedUndoableCommand() throws {
+    let rate = try FrameRate(numerator: 24, denominator: 1)
+    let asset = try makeAsset(id: assetAID, rate: rate, frameCount: 96)
+    let clipRange = try makeRange(rate: rate, startFrame: 24, frameCount: 48)
+    let clip = TimelineClip(id: clipAID, assetID: asset.id, sourceRange: clipRange)
+    let project = ProjectState(
+        name: "Stabilization command",
+        mediaLibrary: [asset],
+        timelineFormat: makeFormat(from: asset),
+        clips: [clip]
+    )
+    let first = StabilizationEffect(
+        mode: .steady,
+        analysisCoverage: try makeRange(rate: rate, startFrame: 12, frameCount: 72),
+        processingRevision: 1
+    )
+    let second = StabilizationEffect(
+        mode: .naturalMotion,
+        analysisCoverage: clipRange,
+        processingRevision: 1
+    )
+    var editor = ProjectEditor(project: project)
+
+    try editor.apply(.setStabilizationPasses(clipID: clipAID, passes: [first, second]))
+    #expect(editor.project.clips[0].stabilizationPasses == [first, second])
+    #expect(try editor.undo())
+    #expect(editor.project == project)
+    #expect(try editor.redo())
+
+    let invalid = StabilizationEffect(
+        mode: .steady,
+        analysisCoverage: try makeRange(rate: rate, startFrame: 0, frameCount: 12),
+        processingRevision: 1
+    )
+    #expect(throws: TimelineEditError.invalidStabilizationCoverage(invalid.id)) {
+        try editor.apply(.setStabilizationPasses(clipID: clipAID, passes: [invalid]))
+    }
+    #expect(editor.project.clips[0].stabilizationPasses == [first, second])
+}
+
 @Test func duplicateReorderRippleDeleteAndDivergentHistoryAreReversible() throws {
     let rate = try FrameRate(numerator: 24, denominator: 1)
     let asset = try makeAsset(id: assetAID, rate: rate, frameCount: 96)

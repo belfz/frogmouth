@@ -333,13 +333,13 @@ Acceptance:
 
 Dependencies: T15, T16.
 
-- [ ] Analyze only the selected clip's current valid pipeline.
-- [ ] Preserve multiple ordered passes.
-- [ ] Store transforms and the 1024-pixel preview proxy in persistent project cache.
-- [ ] Implement explicit **Update Stabilization** for stale clips.
-- [ ] Keep the progress modal blocking and cancellable.
-- [ ] Preview stale clips from source and valid clips from the correctly mapped proxy range.
-- [ ] Reuse valid caches after reopen and undo/redo.
+- [x] Analyze only the selected clip's current valid pipeline.
+- [x] Preserve multiple ordered passes.
+- [x] Store transforms and the 1024-pixel preview proxy in persistent project cache.
+- [x] Implement explicit **Update Stabilization** for stale clips.
+- [x] Keep the progress modal blocking and cancellable.
+- [x] Preview stale clips from source and valid clips from the correctly mapped proxy range.
+- [x] Reuse valid caches after reopen and undo/redo.
 
 Acceptance:
 
