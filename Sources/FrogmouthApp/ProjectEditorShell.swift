@@ -11,23 +11,33 @@ struct ProjectEditorShell: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HSplitView {
-                if showsLibrary {
-                    MediaLibraryView(document: document, project: project)
-                        .frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
-                }
+            GeometryReader { workspaceGeometry in
+                HSplitView {
+                    if showsLibrary {
+                        MediaLibraryView(document: document, project: project)
+                            .frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
+                            .frame(height: workspaceGeometry.size.height)
+                    }
 
-                TimelinePlayerView(document: document, project: project)
-                    .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
+                    TimelinePlayerView(document: document, project: project)
+                        .frame(minWidth: 360, maxWidth: .infinity)
+                        .frame(height: workspaceGeometry.size.height)
 
-                if showsInspector {
-                    ProjectInspectorView(
-                        document: document,
-                        project: document.presentationProject ?? project
-                    )
-                        .frame(minWidth: 220, idealWidth: 270, maxWidth: 360)
+                    if showsInspector {
+                        ProjectInspectorView(
+                            document: document,
+                            project: document.presentationProject ?? project
+                        )
+                            .frame(minWidth: 220, idealWidth: 270, maxWidth: 360)
+                            .frame(height: workspaceGeometry.size.height)
+                    }
                 }
+                .frame(
+                    width: workspaceGeometry.size.width,
+                    height: workspaceGeometry.size.height
+                )
             }
+            .layoutPriority(1)
 
             Divider()
 
@@ -241,6 +251,7 @@ private struct MediaLibraryView: View {
                     systemImage: "film.stack",
                     description: Text("Import videos to build the Media Library.")
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 6) {
