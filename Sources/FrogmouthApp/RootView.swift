@@ -15,8 +15,13 @@ struct RootView: View {
                     .controlSize(.large)
             case let .unavailable(message):
                 FFmpegSetupView(message: message)
-            case .ready:
+            case let .ready(installation):
                 ProjectRootView(document: document)
+                    .task(id: installation.stabilizationCacheToolRevision) {
+                        document.configureStabilizationToolRevision(
+                            installation.stabilizationCacheToolRevision
+                        )
+                    }
             }
         }
         .navigationTitle(document.displayName)

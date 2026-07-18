@@ -32,6 +32,7 @@ final class ProjectDocumentViewModel: ObservableObject {
     @Published private(set) var playheadFrame: Int64 = 0
     @Published private(set) var playbackLocation: PlaybackLocation?
     @Published private(set) var trimPreview: TrimPreview?
+    @Published private(set) var stabilizationStatuses: [TimelineClip.ID: StabilizationStatus] = [:]
     @Published var errorMessage: String?
     @Published var isUnsavedConfirmationPresented = false
 
@@ -45,23 +46,28 @@ final class ProjectDocumentViewModel: ObservableObject {
     private let store: ProjectDocumentStore
     private let factsInspector: any ProjectMediaFactsInspecting
     private let fingerprinter: any MediaFingerprinting
+    private let stabilizationStatusResolver: StabilizationStatusResolver
     let thumbnailService: ThumbnailService
     let playback: PlaybackCoordinator
     private var session: ProjectDocumentSession?
     private var pendingTransition: PendingTransition?
     private var autosaveStatusTask: Task<Void, Never>?
+    private var stabilizationStatusTask: Task<Void, Never>?
+    private var stabilizationToolRevision: String?
     private var windowCloseCompletion: (() -> Void)?
 
     init(
         store: ProjectDocumentStore = ProjectDocumentStore(),
         factsInspector: any ProjectMediaFactsInspecting = AVProjectMediaFactsInspector(),
         fingerprinter: any MediaFingerprinting = MediaFingerprinter(),
+        stabilizationStatusResolver: StabilizationStatusResolver = StabilizationStatusResolver(),
         thumbnailService: ThumbnailService = ThumbnailService(),
         playback: PlaybackCoordinator = PlaybackCoordinator()
     ) {
         self.store = store
         self.factsInspector = factsInspector
         self.fingerprinter = fingerprinter
+        self.stabilizationStatusResolver = stabilizationStatusResolver
         self.thumbnailService = thumbnailService
         self.playback = playback
         playback.playheadDidChange = { [weak self] frame, location in
@@ -85,6 +91,15 @@ final class ProjectDocumentViewModel: ObservableObject {
         return playheadFrame > entry.startFrame
             && playheadFrame < entry.startFrame + entry.durationFrames
     }
+    var canExportTimeline: Bool {
+        guard !isBusy,
+              let project,
+              !project.clips.isEmpty,
+              (try? TimelineIndex(project: project)) != nil else { return false }
+        return project.clips.allSatisfy {
+            !stabilizationStatus(for: $0, in: project).blocksExport
+        }
+    }
     var presentationProject: ProjectState? {
         guard var project else { return nil }
         if let trimPreview,
@@ -96,6 +111,30 @@ final class ProjectDocumentViewModel: ObservableObject {
     var displayName: String {
         guard let project else { return "frogmouth" }
         return hasUnsavedChanges ? "\(project.name) — Edited" : project.name
+    }
+
+    func configureStabilizationToolRevision(_ revision: String) {
+        guard stabilizationToolRevision != revision else { return }
+        stabilizationToolRevision = revision
+        scheduleStabilizationStatusRefresh()
+    }
+
+    func stabilizationStatus(
+        for clip: TimelineClip,
+        in project: ProjectState
+    ) -> StabilizationStatus {
+        guard !clip.stabilizationPasses.isEmpty else { return .none }
+        let asset = project.mediaLibrary.first { $0.id == clip.assetID }
+        if let coverageStatus = StabilizationStatusResolver.coverageStatus(
+            for: clip,
+            asset: asset
+        ) {
+            return coverageStatus
+        }
+        guard stabilizationToolRevision != nil else {
+            return .stale(.validationPending)
+        }
+        return stabilizationStatuses[clip.id] ?? .stale(.validationPending)
     }
 
     func requestNewProject() {
@@ -450,6 +489,7 @@ final class ProjectDocumentViewModel: ObservableObject {
 
     func shutdown() {
         autosaveStatusTask?.cancel()
+        stabilizationStatusTask?.cancel()
         playback.shutdown()
     }
 
@@ -650,7 +690,9 @@ final class ProjectDocumentViewModel: ObservableObject {
 
     private func install(_ session: ProjectDocumentSession?) {
         autosaveStatusTask?.cancel()
+        stabilizationStatusTask?.cancel()
         trimPreview = nil
+        stabilizationStatuses = [:]
         self.session = session
     }
 
@@ -658,6 +700,7 @@ final class ProjectDocumentViewModel: ObservableObject {
         let previousProject = project
         let previousMediaURLs = resolvedMediaURLs
         guard let session else {
+            stabilizationStatusTask?.cancel()
             project = nil
             fileURL = nil
             resolvedMediaURLs = [:]
@@ -666,6 +709,7 @@ final class ProjectDocumentViewModel: ObservableObject {
             canRedo = false
             playheadFrame = 0
             playbackLocation = nil
+            stabilizationStatuses = [:]
             playback.rebuild(project: nil, mediaURLs: [:], preservingFrame: 0)
             return
         }
@@ -687,6 +731,9 @@ final class ProjectDocumentViewModel: ObservableObject {
                 mediaURLs: resolvedMediaURLs,
                 preservingFrame: playheadFrame
             )
+        }
+        if project != previousProject {
+            scheduleStabilizationStatusRefresh()
         }
     }
 
@@ -728,6 +775,35 @@ final class ProjectDocumentViewModel: ObservableObject {
             } catch {
                 // A newer edit replaced this refresh.
             }
+        }
+    }
+
+    private func scheduleStabilizationStatusRefresh() {
+        stabilizationStatusTask?.cancel()
+        guard let project else {
+            stabilizationStatuses = [:]
+            return
+        }
+
+        stabilizationStatuses = Dictionary(uniqueKeysWithValues: project.clips.map { clip in
+            let status: StabilizationStatus = clip.stabilizationPasses.isEmpty
+                ? .none
+                : .stale(.validationPending)
+            return (clip.id, status)
+        })
+        guard let toolRevision = stabilizationToolRevision else { return }
+
+        let resolver = stabilizationStatusResolver
+        stabilizationStatusTask = Task { [weak self] in
+            let statuses = await resolver.statuses(
+                for: project,
+                toolRevision: toolRevision
+            )
+            guard !Task.isCancelled,
+                  let self,
+                  self.project == project,
+                  self.stabilizationToolRevision == toolRevision else { return }
+            self.stabilizationStatuses = statuses
         }
     }
 

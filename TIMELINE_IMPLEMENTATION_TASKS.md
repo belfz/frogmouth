@@ -316,12 +316,12 @@ Acceptance:
 
 Dependencies: T01, T06, T09.
 
-- [ ] Persist pass mode/order, analysis coverage, and processing revision but not cache URLs.
-- [ ] Derive `none`, `valid`, and `stale(reason:)` from project plus cache state.
-- [ ] Preserve complete pass stacks on split and duplicate.
-- [ ] Keep inward trims/reorder valid; mark outward extensions stale.
-- [ ] Mark missing/purged/incompatible artifacts stale.
-- [ ] Block export whenever a timeline-used clip is stale.
+- [x] Persist pass mode/order, analysis coverage, and processing revision but not cache URLs.
+- [x] Derive `none`, `valid`, and `stale(reason:)` from project plus cache state.
+- [x] Preserve complete pass stacks on split and duplicate.
+- [x] Keep inward trims/reorder valid; mark outward extensions stale.
+- [x] Mark missing/purged/incompatible artifacts stale.
+- [x] Block export whenever a timeline-used clip is stale.
 
 Acceptance:
 

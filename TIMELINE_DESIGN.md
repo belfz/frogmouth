@@ -315,6 +315,8 @@ Every entry identity contains a namespace and logical artifact ID, the asset UUI
 
 **Clear Project Cache** removes only `projects/<project UUID>` beneath the fixed app cache root. **Clear All Caches** removes only that root's `projects` child. Neither operation consumes a source or document path, and cache URLs never enter project JSON. Cache deletion never corrupts a project; it changes configured stabilization to stale.
 
+The Phase 3 status layer assigns each effect two independently validated identities: an ASCII transform artifact and an audio-linked 1024-pixel preview artifact. Both share the effect UUID, exact analysis domain, ordered predecessor lineage, deterministic mode profile, source fingerprint, processing revision, and FFmpeg executable/tool revision; only the preview identity includes proxy-specific settings. Clip IDs and current inward-trim ranges are deliberately excluded, allowing split and duplicate descendants to reuse the same analyzed lineage. The editor resolves cache status asynchronously, checks range coverage synchronously during live trims, exposes the precise stale reason in the inspector, and treats an unresolved or stale configured pass as export-blocking.
+
 ### Transform alignment after split — validated decision
 
 `vidstabdetect` ASCII rows contain frame-relative local-motion observations. `vidstabtransform` integrates and smooths those observations over the complete input domain. A child produced by splitting an analyzed range therefore cannot seek to its own source start and consume a sliced/renumbered parent `.trf`: both the prior integrated path and surrounding smoothing window would change.
