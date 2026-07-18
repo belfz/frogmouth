@@ -253,9 +253,13 @@ public struct TimelineExportValidator: Sendable {
                 expected: expected.creationTime
             )
         }
-        let provenanceValues = ["comment", "description", "encoder", "software"]
-            .compactMap { normalized[$0] }
-        guard provenanceValues.contains(where: { $0.contains(TimelineExportMetadata.provenance) }) else {
+        // MP4/MOV comments are not always promoted to AVMetadataCommonKey.description.
+        // Depending on the muxer, AVFoundation may expose the same value only under a
+        // format-specific key such as `udta/%A9cmt`, so validate the preserved value
+        // rather than relying on one container-specific key spelling.
+        guard normalized.values.contains(where: {
+            $0.contains(TimelineExportMetadata.provenance)
+        }) else {
             throw TimelineExportValidationError.incorrectMetadata(
                 key: "provenance",
                 expected: TimelineExportMetadata.provenance

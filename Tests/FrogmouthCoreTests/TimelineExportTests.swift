@@ -104,7 +104,7 @@ import Testing
         metadata: [
             "title": fixture.project.name,
             "creationDate": metadata.creationTime,
-            "description": TimelineExportMetadata.provenance,
+            "udta/%A9cmt": TimelineExportMetadata.provenance,
             "artist": "Marcin",
         ]
     )
@@ -263,6 +263,39 @@ import Testing
         for: inspected.exactDuration,
         rounding: .nearestTiesAwayFromZero
     ) == 12)
+}
+
+@Test func mediaInspectorExposesMP4FormatSpecificProvenanceValue() async throws {
+    guard let installation = try? await FFmpegLocator().locateAndValidate() else { return }
+    let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent(".build/test-media-fixtures/base-24fps-320x180.mp4")
+    guard FileManager.default.fileExists(atPath: sourceURL.path) else { return }
+
+    let workspace = try SessionWorkspace()
+    defer { workspace.removeAll() }
+    let output = workspace.directory.appendingPathComponent("metadata-shape.mp4")
+    let runner = FFmpegRunner(
+        diagnostics: DiagnosticLogStore(baseDirectory: workspace.directory)
+    )
+    _ = try await runner.run(
+        executable: installation.executableURL,
+        arguments: [
+            "-hide_banner", "-nostdin", "-nostats", "-progress", "pipe:1",
+            "-i", sourceURL.path,
+            "-y", "-map", "0", "-c", "copy", "-map_metadata", "-1",
+            "-metadata", "creation_time=2026-07-18T08:00:00Z",
+            "-metadata", "title=MP4 metadata fixture",
+            "-metadata", "comment=\(TimelineExportMetadata.provenance)",
+            output.path,
+        ],
+        duration: 2,
+        sessionID: "mp4-metadata-shape",
+        phase: "fixture",
+        progress: { _ in }
+    )
+
+    let inspected = try await MediaInspector().inspect(url: output)
+    #expect(inspected.metadata.values.contains(TimelineExportMetadata.provenance))
 }
 
 private struct ExportFixture {
