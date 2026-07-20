@@ -325,8 +325,11 @@ final class EditorViewModel: ObservableObject {
     }
 
     func copyDiagnostics() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(diagnostics.contents(), forType: .string)
+        Task {
+            let contents = await diagnostics.contentsAsync()
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(contents, forType: .string)
+        }
     }
 
     func revealLogs() {

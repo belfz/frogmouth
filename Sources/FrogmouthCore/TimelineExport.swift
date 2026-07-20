@@ -38,6 +38,7 @@ public struct TimelineExportStaleClipIssue: Equatable, Sendable {
 
 public enum TimelineExportReadinessError: LocalizedError, Equatable, Sendable {
     case ffmpegUnavailable
+    case validationInProgress
     case invalidTimeline(String)
     case missingSources([TimelineExportSourceIssue])
     case stabilizationValidationPending([TimelineExportStaleClipIssue])
@@ -47,6 +48,8 @@ public enum TimelineExportReadinessError: LocalizedError, Equatable, Sendable {
         switch self {
         case .ffmpegUnavailable:
             "Timeline export requires the supported FFmpeg installation. Install or repair FFmpeg, then restart frogmouth and try again."
+        case .validationInProgress:
+            "frogmouth is still checking source files and stabilization. Wait for validation to finish, then try exporting again."
         case let .invalidTimeline(reason):
             "The timeline cannot be exported: \(reason) Fix the listed timeline problem and try again."
         case let .missingSources(issues):

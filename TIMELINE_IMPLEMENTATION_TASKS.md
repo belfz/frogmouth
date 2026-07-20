@@ -427,12 +427,12 @@ unchanged.
 
 Dependencies: T12–T20.
 
-- [ ] Benchmark 25 imported 4K sources, 50 clips, and a 30-minute timeline.
-- [ ] Measure open, autosave, composition rebuild, cached/uncached scroll, zoom, trim feedback, memory, and disk cache.
-- [ ] Move any remaining media/file work off the main actor.
-- [ ] Add accessibility labels/actions for clips, handles, playhead, icons, sidebars, and processing state.
-- [ ] Test keyboard focus even though comprehensive shortcuts are deferred.
-- [ ] Perform human playback/export acceptance tests on real wildlife footage.
+- [x] Benchmark 25 imported 4K sources, 50 clips, and a 30-minute timeline.
+- [x] Measure open, autosave, composition rebuild, cached/uncached scroll, zoom, trim feedback, memory, and disk cache.
+- [x] Move any remaining media/file work off the main actor.
+- [x] Add accessibility labels/actions for clips, handles, playhead, icons, sidebars, and processing state.
+- [x] Test keyboard focus even though comprehensive shortcuts are deferred.
+- [x] Perform human playback/export acceptance tests on real wildlife footage.
 
 Acceptance:
 

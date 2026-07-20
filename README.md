@@ -12,6 +12,8 @@ The original single-clip design is in [TECHNICAL_DESIGN.md](TECHNICAL_DESIGN.md)
 
 The first timeline release will preserve the colour characteristics established by its first clip. Clips with conflicting primaries, transfer function (including HDR or Log), matrix, or full/limited range will be rejected with the differing properties listed; frogmouth will not silently convert them. Proper colour conversion is deferred to a later iteration.
 
+Stabilization is intentionally blocking in the first timeline release: analysis and preview rendering show a cancellable progress view, but editing cannot continue until the operation finishes or is cancelled. Background per-clip stabilization is planned for a later iteration. The 25-source/50-clip performance methodology and current measurements are recorded in [Tests/Performance/T21_BENCHMARK.md](Tests/Performance/T21_BENCHMARK.md).
+
 ## Development
 
 Requirements:
@@ -34,11 +36,19 @@ Build a local, unsigned app bundle with:
 
 The result is `build/frogmouth.app`. Run tests with `swift test`.
 
+Run the target-scale editor benchmark with:
+
+```sh
+scripts/generate-media-fixtures.sh
+swift run -c release frogmouth-benchmark
+```
+
 frogmouth verifies FFmpeg only at startup. When setup is required, install the documented build and restart the app.
 
 ## Future development ideas / to do
 
 - H.264 compatibility export for recipients or older hardware/software that cannot reliably decode HEVC; it needs more bitrate for comparable quality.
+- Investigate oversized timeline exports from MOV sources and improve automatic codec/bitrate decisions so trimmed outputs do not unexpectedly exceed their source files while retaining comparable quality.
 - Basic colour controls: exposure, white balance, and contrast while preserving a no-adjustment default.
 - A stabilization-strength slider after preset tuning is validated.
 - Before/after comparison and finer trim controls.

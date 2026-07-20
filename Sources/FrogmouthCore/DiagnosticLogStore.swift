@@ -3,7 +3,7 @@ import Foundation
 public final class DiagnosticLogStore: @unchecked Sendable {
     public let directory: URL
     private let fileURL: URL
-    private let lock = NSLock()
+    private let queue = DispatchQueue(label: "dev.frogmouth.diagnostics", qos: .utility)
     private let formatter = ISO8601DateFormatter()
 
     public init(baseDirectory: URL? = nil) {
@@ -18,7 +18,7 @@ public final class DiagnosticLogStore: @unchecked Sendable {
     }
 
     public func append(level: String, sessionID: String, phase: String, message: String) {
-        lock.withLock {
+        queue.async { [self] in
             let timestamp = formatter.string(from: Date())
             let line = "\(timestamp) [\(level)] session=\(sessionID) phase=\(phase) \(message)\n"
             guard let data = line.data(using: .utf8) else { return }
@@ -73,9 +73,21 @@ public final class DiagnosticLogStore: @unchecked Sendable {
     }
 
     public func contents() -> String {
-        lock.withLock {
-            (try? String(contentsOf: fileURL, encoding: .utf8)) ?? "No diagnostics are available."
+        queue.sync {
+            readContents()
         }
+    }
+
+    public func contentsAsync() async -> String {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                continuation.resume(returning: readContents())
+            }
+        }
+    }
+
+    private func readContents() -> String {
+        (try? String(contentsOf: fileURL, encoding: .utf8)) ?? "No diagnostics are available."
     }
 
     private static func shellDisplayQuote(_ value: String) -> String {
@@ -106,13 +118,5 @@ public final class DiagnosticLogStore: @unchecked Sendable {
         #else
         "unknown"
         #endif
-    }
-}
-
-private extension NSLock {
-    func withLock<T>(_ body: () throws -> T) rethrows -> T {
-        lock()
-        defer { unlock() }
-        return try body()
     }
 }

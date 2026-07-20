@@ -35,6 +35,8 @@ final class ProjectDocumentViewModel: ObservableObject {
     @Published private(set) var stabilizationStatuses: [TimelineClip.ID: StabilizationStatus] = [:]
     @Published private(set) var stabilizationProcessingPhase: ProcessingPhase = .idle
     @Published private(set) var timelineExportProcessingPhase: ProcessingPhase = .idle
+    @Published private(set) var isCheckingTimelineExportReadiness = false
+    @Published private(set) var timelineExportReadinessError: TimelineExportReadinessError?
     @Published private(set) var lastExportURL: URL?
     @Published var errorMessage: String?
     @Published var isUnsavedConfirmationPresented = false
@@ -62,6 +64,8 @@ final class ProjectDocumentViewModel: ObservableObject {
     private var stabilizationProcessingTask: Task<Void, Never>?
     private var stabilizationProcessingGeneration = UUID()
     private var timelineExportTask: Task<Void, Never>?
+    private var timelineExportReadinessTask: Task<Void, Never>?
+    private var timelineExportReadinessGeneration = UUID()
     private var stabilizationValidations: [TimelineClip.ID: StabilizationValidation] = [:]
     private var ffmpegInstallation: FFmpegInstallation?
     private var windowCloseCompletion: (() -> Void)?
@@ -119,10 +123,17 @@ final class ProjectDocumentViewModel: ObservableObject {
             && playheadFrame < entry.startFrame + entry.durationFrames
     }
     var canExportTimeline: Bool {
-        !isBusy && trimPreview == nil && timelineExportReadinessError() == nil
+        !isBusy
+            && trimPreview == nil
+            && !isCheckingTimelineExportReadiness
+            && ffmpegInstallation != nil
+            && project?.clips.isEmpty == false
+            && timelineExportReadinessError == nil
     }
     var canRequestTimelineExport: Bool {
-        !isBusy && trimPreview == nil && project?.clips.isEmpty == false
+        !isBusy
+            && trimPreview == nil
+            && project?.clips.isEmpty == false
     }
     var canRevealExport: Bool { lastExportURL != nil }
     var canApplySelectedStabilization: Bool {
@@ -221,7 +232,11 @@ final class ProjectDocumentViewModel: ObservableObject {
 
     func presentTimelineExportPanel() {
         guard canRequestTimelineExport, let project else { return }
-        if let error = timelineExportReadinessError() {
+        if isCheckingTimelineExportReadiness {
+            report(TimelineExportReadinessError.validationInProgress, phase: "timeline-export-readiness")
+            return
+        }
+        if let error = timelineExportReadinessError {
             report(error, phase: "timeline-export-readiness")
             return
         }
@@ -485,10 +500,6 @@ final class ProjectDocumentViewModel: ObservableObject {
                 sourceRate: asset.inspected.frameRate
               ) else { return }
 
-        var validator = ProjectEditor(project: project)
-        guard (try? validator.apply(.trimClip(clipID: clipID, sourceRange: range))) != nil else {
-            return
-        }
         trimPreview?.pendingRange = range
     }
 
@@ -522,6 +533,16 @@ final class ProjectDocumentViewModel: ObservableObject {
                 await refreshPublishedState()
             }
         }
+    }
+
+    func adjustTrimByOneTimelineFrame(clipID: TimelineClip.ID, edge: TrimEdge, delta: Int64) {
+        guard delta == -1 || delta == 1 else { return }
+        updateTrimPreview(
+            clipID: clipID,
+            edge: edge,
+            timelineFrameDelta: delta
+        )
+        commitTrimPreview()
     }
 
     func cancelTrimPreview() {
@@ -645,6 +666,7 @@ final class ProjectDocumentViewModel: ObservableObject {
         stabilizationStatusTask?.cancel()
         stabilizationProcessingTask?.cancel()
         timelineExportTask?.cancel()
+        timelineExportReadinessTask?.cancel()
         stabilizationProcessor.cancel()
         timelineExporter.cancel()
         playback.shutdown()
@@ -982,9 +1004,13 @@ final class ProjectDocumentViewModel: ObservableObject {
                 asset = existing
             } else {
                 let facts = try await factsInspector.inspect(url: url)
+                let fingerprinter = self.fingerprinter
+                let fingerprint = try await Task.detached(priority: .utility) {
+                    try fingerprinter.fingerprint(url: url)
+                }.value
                 asset = MediaAsset(
                     path: MediaPathReference(relativeToProject: nil, absoluteFallback: url.path),
-                    fingerprint: try fingerprinter.fingerprint(url: url),
+                    fingerprint: fingerprint,
                     inspected: facts
                 )
                 let command = ProjectCommand.importMedia(asset)
@@ -1115,6 +1141,7 @@ final class ProjectDocumentViewModel: ObservableObject {
         let previousMediaURLs = resolvedMediaURLs
         guard let session else {
             stabilizationStatusTask?.cancel()
+            timelineExportReadinessTask?.cancel()
             project = nil
             fileURL = nil
             resolvedMediaURLs = [:]
@@ -1125,15 +1152,18 @@ final class ProjectDocumentViewModel: ObservableObject {
             playbackLocation = nil
             stabilizationStatuses = [:]
             stabilizationValidations = [:]
+            timelineExportReadinessError = .invalidTimeline("No project is open.")
+            isCheckingTimelineExportReadiness = false
             playback.rebuild(project: nil, mediaURLs: [:], preservingFrame: 0)
             return
         }
-        project = await session.project
-        fileURL = await session.fileURL
-        resolvedMediaURLs = await session.resolvedMediaURLs
-        hasUnsavedChanges = await session.isModified
-        canUndo = await session.canUndo
-        canRedo = await session.canRedo
+        let state = await session.publishedState
+        project = state.project
+        fileURL = state.fileURL
+        resolvedMediaURLs = state.resolvedMediaURLs
+        hasUnsavedChanges = state.isModified
+        canUndo = state.canUndo
+        canRedo = state.canRedo
         if let project,
            project != previousProject || fileURL != previousFileURL || resolvedMediaURLs != previousMediaURLs {
             diagnostics.appendProjectSnapshot(
@@ -1158,6 +1188,8 @@ final class ProjectDocumentViewModel: ObservableObject {
         }
         if project != previousProject {
             scheduleStabilizationStatusRefresh()
+        } else if resolvedMediaURLs != previousMediaURLs {
+            scheduleTimelineExportReadinessRefresh()
         }
     }
 
@@ -1228,6 +1260,7 @@ final class ProjectDocumentViewModel: ObservableObject {
             return (clip.id, status)
         })
         stabilizationValidations = [:]
+        scheduleTimelineExportReadinessRefresh()
         guard let toolRevision = ffmpegInstallation?.stabilizationCacheToolRevision else { return }
 
         let resolver = stabilizationStatusResolver
@@ -1274,6 +1307,7 @@ final class ProjectDocumentViewModel: ObservableObject {
                     fields: fields
                 )
             }
+            self.scheduleTimelineExportReadinessRefresh()
             self.rebuildPlaybackWithValidatedStabilization()
         }
     }
@@ -1308,27 +1342,48 @@ final class ProjectDocumentViewModel: ObservableObject {
         return components.joined(separator: "-").isEmpty ? "Untitled" : components.joined(separator: "-")
     }
 
-    private func timelineExportReadinessError() -> TimelineExportReadinessError? {
+    private func scheduleTimelineExportReadinessRefresh() {
+        timelineExportReadinessTask?.cancel()
+        timelineExportReadinessGeneration = UUID()
+        let generation = timelineExportReadinessGeneration
         guard let project else {
-            return .invalidTimeline("No project is open.")
+            timelineExportReadinessError = .invalidTimeline("No project is open.")
+            isCheckingTimelineExportReadiness = false
+            return
         }
         guard ffmpegInstallation != nil else {
-            return .ffmpegUnavailable
+            timelineExportReadinessError = .ffmpegUnavailable
+            isCheckingTimelineExportReadiness = false
+            return
         }
+        let mediaURLs = resolvedMediaURLs
         let statuses = Dictionary(uniqueKeysWithValues: project.clips.map { clip in
             (clip.id, stabilizationStatus(for: clip, in: project))
         })
-        do {
-            try TimelineExportReadinessValidator().validate(
-                project: project,
-                mediaURLs: resolvedMediaURLs,
-                stabilizationStatuses: statuses
-            )
-            return nil
-        } catch let error as TimelineExportReadinessError {
-            return error
-        } catch {
-            return .invalidTimeline(error.localizedDescription)
+        timelineExportReadinessError = nil
+        isCheckingTimelineExportReadiness = true
+        timelineExportReadinessTask = Task { [weak self] in
+            let result = await Task.detached(priority: .utility) {
+                do {
+                    try TimelineExportReadinessValidator().validate(
+                        project: project,
+                        mediaURLs: mediaURLs,
+                        stabilizationStatuses: statuses
+                    )
+                    return Optional<TimelineExportReadinessError>.none
+                } catch let error as TimelineExportReadinessError {
+                    return error
+                } catch {
+                    return TimelineExportReadinessError.invalidTimeline(
+                        error.localizedDescription
+                    )
+                }
+            }.value
+            guard !Task.isCancelled,
+                  let self,
+                  self.timelineExportReadinessGeneration == generation else { return }
+            self.timelineExportReadinessError = result
+            self.isCheckingTimelineExportReadiness = false
         }
     }
 

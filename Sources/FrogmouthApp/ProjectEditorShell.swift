@@ -1,5 +1,6 @@
 import AppKit
 import FrogmouthCore
+import ImageIO
 import SwiftUI
 
 struct ProjectEditorShell: View {
@@ -10,6 +11,7 @@ struct ProjectEditorShell: View {
     @State private var showsInspector = true
 
     var body: some View {
+        let presentedProject = document.presentationProject ?? project
         VStack(spacing: 0) {
             GeometryReader { workspaceGeometry in
                 HSplitView {
@@ -26,7 +28,7 @@ struct ProjectEditorShell: View {
                     if showsInspector {
                         ProjectInspectorView(
                             document: document,
-                            project: document.presentationProject ?? project
+                            project: presentedProject
                         )
                             .frame(minWidth: 220, idealWidth: 270, maxWidth: 360)
                             .frame(height: workspaceGeometry.size.height)
@@ -43,7 +45,7 @@ struct ProjectEditorShell: View {
 
             SequenceTimelineView(
                 document: document,
-                project: document.presentationProject ?? project
+                project: presentedProject
             )
                 .frame(minHeight: 150, idealHeight: 190, maxHeight: 240)
         }
@@ -55,6 +57,7 @@ struct ProjectEditorShell: View {
                     Label("Media Library", systemImage: "sidebar.left")
                 }
                 .help(showsLibrary ? "Hide Media Library" : "Show Media Library")
+                .accessibilityValue(showsLibrary ? "Shown" : "Hidden")
 
                 Button(action: document.presentImportVideosPanel) {
                     Label("Import Videos", systemImage: "plus")
@@ -85,6 +88,7 @@ struct ProjectEditorShell: View {
                     Label("Inspector", systemImage: "sidebar.right")
                 }
                 .help(showsInspector ? "Hide Inspector" : "Show Inspector")
+                .accessibilityValue(showsInspector ? "Shown" : "Hidden")
 
                 Button(action: document.save) {
                     Label("Save", systemImage: "square.and.arrow.down")
@@ -283,6 +287,9 @@ private struct MediaLibraryView: View {
             .disabled(!document.canImport)
         }
         .background(.regularMaterial)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Media Library sidebar")
+        .accessibilityIdentifier("media-library-sidebar")
     }
 }
 
@@ -301,6 +308,7 @@ private struct MediaLibraryRow: View {
                 request: thumbnailRequest
             )
             .aspectRatio(16 / 9, contentMode: .fit)
+            .accessibilityHidden(true)
             .overlay(alignment: .bottomTrailing) {
                 Text(formatDuration(asset.inspected.duration))
                     .font(.caption2.monospacedDigit())
@@ -346,6 +354,7 @@ private struct MediaLibraryRow: View {
                 .help(usageCount == 0
                       ? "Remove this unused source from the project"
                       : "Used by \(usageCount) timeline clip\(usageCount == 1 ? "" : "s"); removal will be refused")
+                .accessibilityLabel("Remove source")
             }
         }
         .padding(8)
@@ -356,6 +365,17 @@ private struct MediaLibraryRow: View {
         .contentShape(RoundedRectangle(cornerRadius: 8))
         .onTapGesture { document.selectAsset(asset.id) }
         .draggable("asset:\(asset.id.uuidString)")
+        .focusable()
+        .onKeyPress(.return) {
+            document.selectAsset(asset.id)
+            return .handled
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Media source: \(filename)")
+        .accessibilityValue("\(usageCount) timeline \(usageCount == 1 ? "use" : "uses"), \(isSelected ? "selected" : "not selected")")
+        .accessibilityAction(named: "Select source") {
+            document.selectAsset(asset.id)
+        }
     }
 
     private var filename: String {
@@ -408,6 +428,8 @@ private struct TimelinePlayerView: View {
                     .foregroundStyle(.secondary)
                     .padding(20)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Building timeline preview")
                 } else if let error = playback.errorMessage {
                     viewerMessage(
                         icon: "exclamationmark.triangle",
@@ -429,6 +451,7 @@ private struct TimelinePlayerView: View {
         VStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 42))
+                .accessibilityHidden(true)
             Text(title)
                 .font(.title2.bold())
             Text(detail)
@@ -450,6 +473,7 @@ private struct TimelinePlayerView: View {
             .keyboardShortcut(.space, modifiers: [])
             .disabled(project.clips.isEmpty || playback.isBuilding || playback.errorMessage != nil)
             .help(playback.isPlaying ? "Pause" : "Play")
+            .accessibilityLabel(playback.isPlaying ? "Pause timeline" : "Play timeline")
 
             Text(playheadTimecode)
                 .font(.caption.monospacedDigit())
@@ -512,6 +536,9 @@ private struct ProjectInspectorView: View {
             }
         }
         .background(.regularMaterial)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Inspector sidebar")
+        .accessibilityIdentifier("inspector-sidebar")
     }
 
     private var selectedClip: TimelineClip? {
@@ -661,10 +688,7 @@ struct ThumbnailArtwork: View {
         .task(id: request) {
             image = nil
             failed = false
-            guard let request else {
-                failed = true
-                return
-            }
+            guard let request else { return }
             let currentConsumer = UUID()
             consumerID = currentConsumer
             do {
@@ -684,7 +708,7 @@ struct ThumbnailArtwork: View {
                     }
                 }
                 try Task.checkCancellation()
-                image = NSImage(contentsOf: url)
+                image = await loadThumbnailImage(at: url)
                 failed = image == nil
             } catch is CancellationError {
                 // Lazy cells cancel work when they leave the visible/prefetch region.
@@ -705,6 +729,27 @@ struct ThumbnailArtwork: View {
         }
         .accessibilityLabel(failed ? "Thumbnail unavailable" : "Video thumbnail")
     }
+}
+
+private struct SendableCGImage: @unchecked Sendable {
+    let value: CGImage?
+}
+
+private func loadThumbnailImage(at url: URL) async -> NSImage? {
+    let decoded = await Task.detached(priority: .utility) {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return SendableCGImage(value: nil)
+        }
+        return SendableCGImage(
+            value: CGImageSourceCreateImageAtIndex(
+                source,
+                0,
+                [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+            )
+        )
+    }.value
+    guard let image = decoded.value else { return nil }
+    return NSImage(cgImage: image, size: .zero)
 }
 
 private func formatDuration(_ time: MediaTime) -> String {

@@ -8,6 +8,7 @@ let package = Package(
     products: [
         .library(name: "FrogmouthCore", targets: ["FrogmouthCore"]),
         .executable(name: "frogmouth", targets: ["FrogmouthApp"]),
+        .executable(name: "frogmouth-benchmark", targets: ["FrogmouthBenchmark"]),
     ],
     targets: [
         .target(name: "FrogmouthCore"),
@@ -15,6 +16,10 @@ let package = Package(
             name: "FrogmouthApp",
             dependencies: ["FrogmouthCore"],
             resources: [.process("Resources")]
+        ),
+        .executableTarget(
+            name: "FrogmouthBenchmark",
+            dependencies: ["FrogmouthCore"]
         ),
         .testTarget(
             name: "FrogmouthCoreTests",

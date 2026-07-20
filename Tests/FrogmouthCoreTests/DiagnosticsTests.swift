@@ -48,6 +48,21 @@ import Testing
     #expect(matchingLines[0].contains(#"path="/Volumes/Wild life/bird\nclip.mp4""#))
 }
 
+@Test func asynchronousDiagnosticReadFlushesQueuedWrites() async throws {
+    let root = try diagnosticsTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let diagnostics = DiagnosticLogStore(baseDirectory: root)
+    diagnostics.append(
+        level: "INFO",
+        sessionID: "test",
+        phase: "async-read",
+        event: "diagnostics.ready"
+    )
+
+    let contents = await diagnostics.contentsAsync()
+    #expect(contents.contains("diagnostics.ready"))
+}
+
 @Test func cacheDiagnosticsRecordKeysHitsAndStaleReasons() async throws {
     let root = try diagnosticsTemporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }

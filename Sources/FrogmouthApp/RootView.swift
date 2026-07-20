@@ -13,6 +13,7 @@ struct RootView: View {
             case .checking:
                 ProgressView("Checking FFmpeg installation…")
                     .controlSize(.large)
+                    .accessibilityLabel("Checking FFmpeg installation")
             case let .unavailable(message):
                 FFmpegSetupView(message: message)
             case let .ready(installation):
@@ -149,6 +150,10 @@ private struct ProjectRootView: View {
                 .padding(28)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                 .shadow(radius: 18)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Timeline export in progress")
+                .accessibilityIdentifier("timeline-export-progress")
+                .accessibilityValue(accessibilityProgress(document.timelineExportProcessingPhase))
             } else if document.stabilizationProcessingPhase != .idle {
                 Color.black.opacity(0.22).ignoresSafeArea()
                 VStack(spacing: 14) {
@@ -170,6 +175,10 @@ private struct ProjectRootView: View {
                 .padding(28)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                 .shadow(radius: 18)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Stabilization in progress")
+                .accessibilityIdentifier("stabilization-progress")
+                .accessibilityValue(accessibilityProgress(document.stabilizationProcessingPhase))
             } else if document.isBusy {
                 Color.black.opacity(0.15).ignoresSafeArea()
                 ProgressView(activityTitle)
@@ -177,6 +186,7 @@ private struct ProjectRootView: View {
                     .padding(28)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                     .shadow(radius: 18)
+                    .accessibilityLabel(activityTitle)
             }
         }
         .background(isDropTarget ? Color.accentColor.opacity(0.08) : Color.clear)
@@ -190,6 +200,11 @@ private struct ProjectRootView: View {
     private var activityTitle: String {
         guard let progress = document.importProgress else { return "Working…" }
         return "Importing \(progress.completed + 1) of \(progress.total): \(progress.filename)"
+    }
+
+    private func accessibilityProgress(_ phase: ProcessingPhase) -> String {
+        guard let progress = phase.progress else { return phase.title }
+        return "\(phase.title) \(Int((progress * 100).rounded())) percent"
     }
 }
 
