@@ -300,11 +300,10 @@ final class EditorViewModel: ObservableObject {
 
                 let outputInfo = try await mediaInspector.inspect(url: temporaryOutput)
                 try validate(outputInfo: outputInfo, against: media, duration: snapshot.duration)
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporaryOutput)
-                } else {
-                    try FileManager.default.moveItem(at: temporaryOutput, to: destination)
-                }
+                try AtomicTimelineExportFileFinalizer().finalize(
+                    temporaryURL: temporaryOutput,
+                    destinationURL: destination
+                )
                 lastExportURL = destination
                 processingPhase = .idle
                 diagnostics.append(level: "INFO", sessionID: sessionID, phase: "export", message: "completed output=\(destination.path)")

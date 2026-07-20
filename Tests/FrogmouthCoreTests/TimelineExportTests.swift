@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 
@@ -161,6 +162,29 @@ import Testing
 
     #expect(try Data(contentsOf: destination) == Data("new video".utf8))
     #expect(!FileManager.default.fileExists(atPath: temporary.path))
+}
+
+@Test func atomicTimelineFinalizerClearsOnlyTheHiddenFileFlag() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "frogmouth-export-visibility-\(UUID().uuidString)",
+        isDirectory: true
+    )
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let temporary = directory.appendingPathComponent(".partial.mp4")
+    let destination = directory.appendingPathComponent("final.mp4")
+    try Data("new video".utf8).write(to: temporary)
+    let preservedFlag = UInt32(UF_NODUMP)
+    try setFileFlags(UInt32(UF_HIDDEN) | preservedFlag, at: temporary)
+
+    try AtomicTimelineExportFileFinalizer().finalize(
+        temporaryURL: temporary,
+        destinationURL: destination
+    )
+
+    let finalFlags = try fileFlags(at: destination)
+    #expect(finalFlags & UInt32(UF_HIDDEN) == 0)
+    #expect(finalFlags & preservedFlag == preservedFlag)
 }
 
 @Test func failedAndCancelledTimelineExportsPreserveExistingDestinationAndCleanTemporaryFiles() async throws {
@@ -406,6 +430,28 @@ private func argumentValue(after option: String, in arguments: [String]) -> Stri
         return nil
     }
     return arguments[index + 1]
+}
+
+private func fileFlags(at url: URL) throws -> UInt32 {
+    var fileStatus = stat()
+    let result = url.withUnsafeFileSystemRepresentation { path in
+        guard let path else { return Int32(-1) }
+        return Darwin.lstat(path, &fileStatus)
+    }
+    guard result == 0 else {
+        throw CocoaError(.fileReadUnknown)
+    }
+    return fileStatus.st_flags
+}
+
+private func setFileFlags(_ flags: UInt32, at url: URL) throws {
+    let result = url.withUnsafeFileSystemRepresentation { path in
+        guard let path else { return Int32(-1) }
+        return Darwin.chflags(path, flags)
+    }
+    guard result == 0 else {
+        throw CocoaError(.fileWriteUnknown)
+    }
 }
 
 private struct ExportInspector: MediaInspecting {

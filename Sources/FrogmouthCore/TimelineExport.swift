@@ -307,10 +307,13 @@ public struct TimelineExportValidator: Sendable {
 }
 
 public enum TimelineExportFileError: LocalizedError, Equatable, Sendable {
+    case visibilityNormalizationFailed(path: String, errorCode: Int32)
     case finalizationFailed(path: String, errorCode: Int32)
 
     public var errorDescription: String? {
         switch self {
+        case let .visibilityNormalizationFailed(path, code):
+            "The export could not make its temporary file visible at \(path) (system error \(code)). The previous file was left unchanged."
         case let .finalizationFailed(path, code):
             "The export could not replace \(path) (system error \(code)). The previous file was left unchanged."
         }
@@ -325,6 +328,7 @@ public struct AtomicTimelineExportFileFinalizer: TimelineExportFileFinalizing {
     public init() {}
 
     public func finalize(temporaryURL: URL, destinationURL: URL) throws {
+        try removeHiddenFlag(from: temporaryURL)
         let status = temporaryURL.withUnsafeFileSystemRepresentation { temporaryPath in
             destinationURL.withUnsafeFileSystemRepresentation { destinationPath in
                 guard let temporaryPath, let destinationPath else { return Int32(-1) }
@@ -335,6 +339,34 @@ public struct AtomicTimelineExportFileFinalizer: TimelineExportFileFinalizing {
             throw TimelineExportFileError.finalizationFailed(
                 path: destinationURL.path,
                 errorCode: errno
+            )
+        }
+    }
+
+    private func removeHiddenFlag(from url: URL) throws {
+        var fileStatus = stat()
+        let statError = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return EINVAL }
+            return Darwin.lstat(path, &fileStatus) == 0 ? 0 : errno
+        }
+        guard statError == 0 else {
+            throw TimelineExportFileError.visibilityNormalizationFailed(
+                path: url.path,
+                errorCode: statError
+            )
+        }
+
+        let hiddenFlag = UInt32(UF_HIDDEN)
+        guard fileStatus.st_flags & hiddenFlag != 0 else { return }
+        let visibleFlags = fileStatus.st_flags & ~hiddenFlag
+        let chflagsError = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return EINVAL }
+            return Darwin.chflags(path, visibleFlags) == 0 ? 0 : errno
+        }
+        guard chflagsError == 0 else {
+            throw TimelineExportFileError.visibilityNormalizationFailed(
+                path: url.path,
+                errorCode: chflagsError
             )
         }
     }
