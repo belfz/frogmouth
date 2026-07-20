@@ -12,17 +12,17 @@ public enum TimelineRenderPlanningError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .emptyTimeline:
-            "The timeline is empty."
+            "The timeline is empty. Add at least one clip before exporting."
         case .missingTimelineFormat:
-            "The timeline has no output format."
+            "The timeline has no output format. Import a readable video to establish the timeline format."
         case let .missingMediaURL(assetID):
-            "The source file for media \(assetID.uuidString) is unavailable."
+            "The source file for media \(assetID.uuidString) is unavailable. Restore it at its recorded path, reopen the project if needed, and try again."
         case let .unrepresentableSourceBoundary(clipID, time):
-            "Clip \(clipID.uuidString) has a source boundary at \(time.value)/\(time.timescale) that is not on a source frame."
+            "Clip \(clipID.uuidString) has a source boundary at \(time.value)/\(time.timescale) that is not on a source frame. Trim the clip again so the boundary snaps to a frame."
         case let .invalidStabilizationMode(effectID):
-            "Stabilization pass \(effectID.uuidString) has no render profile."
+            "Stabilization pass \(effectID.uuidString) has no render profile. Select the clip and update stabilization."
         case let .invalidStabilizationCoverage(effectID):
-            "Stabilization pass \(effectID.uuidString) has invalid or non-nested analysis coverage."
+            "Stabilization pass \(effectID.uuidString) has invalid or non-nested analysis coverage. Select the clip and update stabilization."
         case let .missingStabilizationTransforms(effectID):
             "The transform cache for stabilization pass \(effectID.uuidString) is unavailable. Update stabilization."
         }

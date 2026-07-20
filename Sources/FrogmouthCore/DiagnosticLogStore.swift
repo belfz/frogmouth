@@ -37,6 +37,24 @@ public final class DiagnosticLogStore: @unchecked Sendable {
         }
     }
 
+    public func append(
+        level: String,
+        sessionID: String,
+        phase: String,
+        event: String,
+        fields: [String: String] = [:]
+    ) {
+        let components = ["event=\(Self.structuredValue(event))"] + fields
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\(Self.structuredValue($0.value))" }
+        append(
+            level: level,
+            sessionID: sessionID,
+            phase: phase,
+            message: components.joined(separator: " ")
+        )
+    }
+
     public func appendProcessLog(
         sessionID: String,
         phase: String,
@@ -65,6 +83,16 @@ public final class DiagnosticLogStore: @unchecked Sendable {
         return "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
+    private static func structuredValue(_ value: String) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        guard let data = try? encoder.encode(value),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "\"<unencodable>\""
+        }
+        return encoded
+    }
+
     private static func systemDescription() -> String {
         let info = ProcessInfo.processInfo
         return "frogmouth=development macOS=\(info.operatingSystemVersionString) architecture=\(architecture)"
@@ -88,4 +116,3 @@ private extension NSLock {
         return try body()
     }
 }
-

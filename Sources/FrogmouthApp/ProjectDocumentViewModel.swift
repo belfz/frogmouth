@@ -70,9 +70,9 @@ final class ProjectDocumentViewModel: ObservableObject {
         store: ProjectDocumentStore = ProjectDocumentStore(),
         factsInspector: any ProjectMediaFactsInspecting = AVProjectMediaFactsInspector(),
         fingerprinter: any MediaFingerprinting = MediaFingerprinter(),
-        stabilizationStatusResolver: StabilizationStatusResolver = StabilizationStatusResolver(),
-        thumbnailService: ThumbnailService = ThumbnailService(),
-        playback: PlaybackCoordinator = PlaybackCoordinator(),
+        stabilizationStatusResolver: StabilizationStatusResolver? = nil,
+        thumbnailService: ThumbnailService? = nil,
+        playback: PlaybackCoordinator? = nil,
         diagnostics: DiagnosticLogStore = DiagnosticLogStore(),
         stabilizationProcessor: ClipStabilizationProcessor? = nil,
         timelineExporter: TimelineExporter? = nil
@@ -80,19 +80,24 @@ final class ProjectDocumentViewModel: ObservableObject {
         self.store = store
         self.factsInspector = factsInspector
         self.fingerprinter = fingerprinter
-        self.stabilizationStatusResolver = stabilizationStatusResolver
+        let resolver = stabilizationStatusResolver ?? StabilizationStatusResolver(
+            cacheStore: ProjectCacheStore(diagnostics: diagnostics)
+        )
+        self.stabilizationStatusResolver = resolver
         self.stabilizationProcessor = stabilizationProcessor ?? ClipStabilizationProcessor(
-            cacheStore: stabilizationStatusResolver.cacheStore,
-            identityBuilder: stabilizationStatusResolver.identityBuilder,
+            cacheStore: resolver.cacheStore,
+            identityBuilder: resolver.identityBuilder,
             runner: FFmpegRunner(diagnostics: diagnostics)
         )
         self.timelineExporter = timelineExporter ?? TimelineExporter(
-            runner: FFmpegRunner(diagnostics: diagnostics)
+            runner: FFmpegRunner(diagnostics: diagnostics),
+            diagnostics: diagnostics
         )
         self.diagnostics = diagnostics
-        self.thumbnailService = thumbnailService
-        self.playback = playback
-        playback.playheadDidChange = { [weak self] frame, location in
+        self.thumbnailService = thumbnailService ?? ThumbnailService(cacheStore: resolver.cacheStore)
+        let playbackCoordinator = playback ?? PlaybackCoordinator(diagnostics: diagnostics)
+        self.playback = playbackCoordinator
+        playbackCoordinator.playheadDidChange = { [weak self] frame, location in
             self?.playheadFrame = frame
             self?.playbackLocation = location
         }
@@ -114,17 +119,10 @@ final class ProjectDocumentViewModel: ObservableObject {
             && playheadFrame < entry.startFrame + entry.durationFrames
     }
     var canExportTimeline: Bool {
-        guard !isBusy,
-              trimPreview == nil,
-              ffmpegInstallation != nil,
-              let project,
-              !project.clips.isEmpty,
-              (try? TimelineIndex(project: project)) != nil else { return false }
-        return project.clips.allSatisfy { clip in
-            guard let url = resolvedMediaURLs[clip.assetID],
-                  FileManager.default.fileExists(atPath: url.path) else { return false }
-            return !stabilizationStatus(for: clip, in: project).blocksExport
-        }
+        !isBusy && trimPreview == nil && timelineExportReadinessError() == nil
+    }
+    var canRequestTimelineExport: Bool {
+        !isBusy && trimPreview == nil && project?.clips.isEmpty == false
     }
     var canRevealExport: Bool { lastExportURL != nil }
     var canApplySelectedStabilization: Bool {
@@ -204,25 +202,42 @@ final class ProjectDocumentViewModel: ObservableObject {
         do {
             passes = try StabilizationPassPlanner.updating(clip)
         } catch {
-            errorMessage = error.localizedDescription
+            report(error, phase: "stabilization-plan")
             return
         }
         startStabilizationProcessing(clipID: clip.id, passes: passes)
     }
 
     func cancelStabilizationProcessing() {
+        diagnostics.append(
+            level: "INFO",
+            sessionID: project?.id.uuidString ?? "app",
+            phase: "stabilization-processing",
+            event: "operation.cancel-requested"
+        )
         stabilizationProcessingTask?.cancel()
         stabilizationProcessor.cancel()
     }
 
     func presentTimelineExportPanel() {
-        guard canExportTimeline,
-              let project,
-              let suggestion = TimelineExportDestinationPolicy.suggestion(
+        guard canRequestTimelineExport, let project else { return }
+        if let error = timelineExportReadinessError() {
+            report(error, phase: "timeline-export-readiness")
+            return
+        }
+        guard let suggestion = TimelineExportDestinationPolicy.suggestion(
                   project: project,
                   projectFileURL: fileURL,
                   mediaURLs: resolvedMediaURLs
-              ) else { return }
+              ) else {
+            report(
+                TimelineExportReadinessError.invalidTimeline(
+                    "frogmouth could not choose an export destination."
+                ),
+                phase: "timeline-export-readiness"
+            )
+            return
+        }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Movie]
         panel.canCreateDirectories = true
@@ -234,6 +249,12 @@ final class ProjectDocumentViewModel: ObservableObject {
     }
 
     func cancelTimelineExport() {
+        diagnostics.append(
+            level: "INFO",
+            sessionID: project?.id.uuidString ?? "app",
+            phase: "timeline-export",
+            event: "operation.cancel-requested"
+        )
         timelineExportTask?.cancel()
         timelineExporter.cancel()
     }
@@ -320,8 +341,9 @@ final class ProjectDocumentViewModel: ObservableObject {
             do {
                 try await session?.saveAs(to: destination)
                 await refreshPublishedState()
+                logProjectSaved(to: destination, kind: "save-as")
             } catch {
-                errorMessage = error.localizedDescription
+                report(error, phase: "project-save")
                 await refreshPublishedState()
             }
         }
@@ -336,10 +358,17 @@ final class ProjectDocumentViewModel: ObservableObject {
         Task {
             do {
                 _ = try await session.undo()
+                diagnostics.append(
+                    level: "INFO",
+                    sessionID: project?.id.uuidString ?? "app",
+                    phase: "project-undo",
+                    event: "project.history",
+                    fields: ["action": "undo"]
+                )
                 await refreshPublishedState()
                 scheduleAutosaveStatusRefresh()
             } catch {
-                errorMessage = error.localizedDescription
+                report(error, phase: "project-undo")
             }
         }
     }
@@ -353,10 +382,17 @@ final class ProjectDocumentViewModel: ObservableObject {
         Task {
             do {
                 _ = try await session.redo()
+                diagnostics.append(
+                    level: "INFO",
+                    sessionID: project?.id.uuidString ?? "app",
+                    phase: "project-redo",
+                    event: "project.history",
+                    fields: ["action": "redo"]
+                )
                 await refreshPublishedState()
                 scheduleAutosaveStatusRefresh()
             } catch {
-                errorMessage = error.localizedDescription
+                report(error, phase: "project-redo")
             }
         }
     }
@@ -465,13 +501,24 @@ final class ProjectDocumentViewModel: ObservableObject {
                 isBusy = false
             }
             do {
+                diagnostics.append(
+                    level: "INFO",
+                    sessionID: project?.id.uuidString ?? "app",
+                    phase: "project-trim",
+                    event: "project.command",
+                    fields: [
+                        "command": "trim-clip",
+                        "clip_id": preview.clipID.uuidString,
+                        "source_range": preview.pendingRange.diagnosticDescription,
+                    ]
+                )
                 try await session.beginTrim(clipID: preview.clipID)
                 try await session.updateTrim(to: preview.pendingRange)
                 try await session.commitTrim()
                 await refreshPublishedState()
                 scheduleAutosaveStatusRefresh()
             } catch {
-                errorMessage = error.localizedDescription
+                report(error, phase: "project-trim")
                 await refreshPublishedState()
             }
         }
@@ -613,7 +660,7 @@ final class ProjectDocumentViewModel: ObservableObject {
         do {
             transforms = try stabilizationTransforms(for: project)
         } catch {
-            errorMessage = error.localizedDescription
+            report(error, phase: "timeline-export")
             return
         }
 
@@ -630,6 +677,13 @@ final class ProjectDocumentViewModel: ObservableObject {
         )
         isBusy = true
         timelineExportProcessingPhase = .exporting(progress: 0)
+        diagnostics.append(
+            level: "INFO",
+            sessionID: project.id.uuidString,
+            phase: "timeline-export",
+            event: "operation.started",
+            fields: ["destination_path": destination.path]
+        )
         timelineExportTask = Task { [weak self] in
             guard let self else { return }
             defer {
@@ -655,10 +709,22 @@ final class ProjectDocumentViewModel: ObservableObject {
                 NSWorkspace.shared.activateFileViewerSelecting([result.destinationURL])
             } catch is CancellationError {
                 // A cancelled export never installs its temporary file.
+                self.diagnostics.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "timeline-export",
+                    event: "operation.cancelled"
+                )
             } catch let error as FrogmouthError where error == .cancelled {
                 // FFmpeg reports user cancellation as a domain error.
+                self.diagnostics.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "timeline-export",
+                    event: "operation.cancelled"
+                )
             } catch {
-                self.errorMessage = error.localizedDescription
+                self.report(error, phase: "timeline-export")
             }
         }
     }
@@ -710,6 +776,17 @@ final class ProjectDocumentViewModel: ObservableObject {
                 }
             }
             do {
+                self.diagnostics.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "stabilization-processing",
+                    event: "operation.started",
+                    fields: [
+                        "clip_id": clipID.uuidString,
+                        "pass_count": String(passes.count),
+                        "effect_ids": passes.map { $0.id.uuidString }.joined(separator: ","),
+                    ]
+                )
                 let result = try await processor.process(
                     project: project,
                     clipID: clipID,
@@ -741,12 +818,33 @@ final class ProjectDocumentViewModel: ObservableObject {
                 ))
                 await self.refreshPublishedState()
                 self.scheduleAutosaveStatusRefresh()
+                self.diagnostics.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "stabilization-processing",
+                    event: "operation.completed",
+                    fields: ["clip_id": clipID.uuidString]
+                )
             } catch is CancellationError {
                 // Cancellation deliberately leaves the project decision unchanged.
+                self.diagnostics.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "stabilization-processing",
+                    event: "operation.cancelled",
+                    fields: ["clip_id": clipID.uuidString]
+                )
             } catch FrogmouthError.cancelled {
                 // FFmpeg cancellation is an expected user action.
+                self.diagnostics.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "stabilization-processing",
+                    event: "operation.cancelled",
+                    fields: ["clip_id": clipID.uuidString]
+                )
             } catch {
-                self.errorMessage = error.localizedDescription
+                self.report(error, phase: "stabilization-processing")
                 await self.refreshPublishedState()
             }
         }
@@ -772,19 +870,46 @@ final class ProjectDocumentViewModel: ObservableObject {
         do {
             switch transition {
             case .newProject:
+                diagnostics.append(
+                    level: "INFO",
+                    sessionID: "app",
+                    phase: "project-lifecycle",
+                    event: "project.new"
+                )
                 install(ProjectDocumentSession.newProject())
                 await refreshPublishedState()
             case let .openProject(url):
+                diagnostics.append(
+                    level: "INFO",
+                    sessionID: "app",
+                    phase: "project-lifecycle",
+                    event: "project.open",
+                    fields: ["project_path": url.path]
+                )
                 let opened = try await ProjectDocumentSession.open(url: url, store: store)
                 install(opened)
                 await refreshPublishedState()
             case let .importAsNewProject(urls):
+                diagnostics.append(
+                    level: "INFO",
+                    sessionID: "app",
+                    phase: "project-lifecycle",
+                    event: "project.new-from-media",
+                    fields: ["source_paths": urls.map(\.path).joined(separator: " | ")]
+                )
                 let newSession = ProjectDocumentSession.newProject(store: store)
                 try await importVideos(urls, into: newSession, appendToTimeline: true)
                 install(newSession)
                 await refreshPublishedState()
                 scheduleAutosaveStatusRefresh()
             case .closeProject:
+                diagnostics.append(
+                    level: "INFO",
+                    sessionID: project?.id.uuidString ?? "app",
+                    phase: "project-lifecycle",
+                    event: "project.close",
+                    fields: ["project_path": fileURL?.path ?? "<unsaved>"]
+                )
                 install(nil)
                 await refreshPublishedState()
                 let completion = windowCloseCompletion
@@ -792,7 +917,7 @@ final class ProjectDocumentViewModel: ObservableObject {
                 completion?()
             }
         } catch {
-            errorMessage = error.localizedDescription
+            report(error, phase: "project-lifecycle")
         }
     }
 
@@ -812,7 +937,7 @@ final class ProjectDocumentViewModel: ObservableObject {
             await refreshPublishedState()
             scheduleAutosaveStatusRefresh()
         } catch {
-            errorMessage = error.localizedDescription
+            report(error, phase: "media-import")
             await refreshPublishedState()
         }
     }
@@ -865,6 +990,18 @@ final class ProjectDocumentViewModel: ObservableObject {
                 let command = ProjectCommand.importMedia(asset)
                 try validator.apply(command)
                 commands.append(command)
+                diagnostics.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "media-import",
+                    event: "media.inspected",
+                    fields: command.diagnosticFields.merging([
+                        "duration": facts.duration.diagnosticRational,
+                        "dimensions": "\(facts.width)x\(facts.height)",
+                        "frame_rate": facts.frameRate.diagnosticRational,
+                        "colour": facts.colour.diagnosticDescription,
+                    ]) { _, new in new }
+                )
             }
 
             guard appendToTimeline else { continue }
@@ -887,13 +1024,22 @@ final class ProjectDocumentViewModel: ObservableObject {
     ) async -> Bool {
         guard !isBusy else { return false }
         do {
+            diagnostics.append(
+                level: "INFO",
+                sessionID: project?.id.uuidString ?? "app",
+                phase: "project-edit",
+                event: "project.command",
+                fields: command.diagnosticFields.merging([
+                    "command": command.diagnosticName,
+                ]) { _, new in new }
+            )
             try await session.apply(command)
             if let clipID { selectedClipID = clipID }
             await refreshPublishedState()
             scheduleAutosaveStatusRefresh()
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            report(error, phase: "project-edit")
             await refreshPublishedState()
             return false
         }
@@ -928,9 +1074,15 @@ final class ProjectDocumentViewModel: ObservableObject {
                 try await session.save()
             }
             await refreshPublishedState()
+            if let savedURL = fileURL ?? destination ?? currentURL {
+                logProjectSaved(
+                    to: savedURL,
+                    kind: currentURL == nil ? "first-save" : "save"
+                )
+            }
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            report(error, phase: "project-save")
             await refreshPublishedState()
             return false
         }
@@ -959,6 +1111,7 @@ final class ProjectDocumentViewModel: ObservableObject {
 
     private func refreshPublishedState() async {
         let previousProject = project
+        let previousFileURL = fileURL
         let previousMediaURLs = resolvedMediaURLs
         guard let session else {
             stabilizationStatusTask?.cancel()
@@ -981,6 +1134,14 @@ final class ProjectDocumentViewModel: ObservableObject {
         hasUnsavedChanges = await session.isModified
         canUndo = await session.canUndo
         canRedo = await session.canRedo
+        if let project,
+           project != previousProject || fileURL != previousFileURL || resolvedMediaURLs != previousMediaURLs {
+            diagnostics.appendProjectSnapshot(
+                project,
+                fileURL: fileURL,
+                resolvedMediaURLs: resolvedMediaURLs
+            )
+        }
         reconcileSelection()
         if let project, let index = try? TimelineIndex(project: project) {
             playheadFrame = min(max(0, playheadFrame), index.totalFrames)
@@ -1034,6 +1195,17 @@ final class ProjectDocumentViewModel: ObservableObject {
                 try await Task.sleep(for: .milliseconds(900))
                 guard let self, let session = self.session else { return }
                 await session.flushAutosave()
+                if let error = await session.lastSaveError {
+                    self.report(error, phase: "project-autosave")
+                } else if let project = self.project, let fileURL = self.fileURL {
+                    self.diagnostics.append(
+                        level: "INFO",
+                        sessionID: project.id.uuidString,
+                        phase: "project-autosave",
+                        event: "project.saved",
+                        fields: ["project_path": fileURL.path]
+                    )
+                }
                 await self.refreshPublishedState()
             } catch {
                 // A newer edit replaced this refresh.
@@ -1075,6 +1247,33 @@ final class ProjectDocumentViewModel: ObservableObject {
                   self.ffmpegInstallation?.stabilizationCacheToolRevision == toolRevision else { return }
             self.stabilizationValidations = validations
             self.stabilizationStatuses = validations.mapValues(\.status)
+            for (index, clip) in project.clips.enumerated() {
+                guard let validation = validations[clip.id] else { continue }
+                var fields = [
+                    "clip_index": String(index),
+                    "clip_id": clip.id.uuidString,
+                    "asset_id": clip.assetID.uuidString,
+                    "source_range": clip.sourceRange.diagnosticDescription,
+                    "status": validation.status.diagnosticName,
+                    "artifact_count": String(validation.artifacts.count),
+                ]
+                if case let .stale(reason) = validation.status {
+                    fields["reason"] = reason.localizedDescription
+                }
+                fields["transform_cache_keys"] = validation.artifacts
+                    .map { $0.transforms.key }
+                    .joined(separator: ",")
+                fields["preview_cache_keys"] = validation.artifacts
+                    .map { $0.preview.key }
+                    .joined(separator: ",")
+                self.diagnostics.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "stabilization-status",
+                    event: "stabilization.status",
+                    fields: fields
+                )
+            }
             self.rebuildPlaybackWithValidatedStabilization()
         }
     }
@@ -1107,6 +1306,60 @@ final class ProjectDocumentViewModel: ObservableObject {
         let invalid = CharacterSet(charactersIn: "/:")
         let components = name.components(separatedBy: invalid).filter { !$0.isEmpty }
         return components.joined(separator: "-").isEmpty ? "Untitled" : components.joined(separator: "-")
+    }
+
+    private func timelineExportReadinessError() -> TimelineExportReadinessError? {
+        guard let project else {
+            return .invalidTimeline("No project is open.")
+        }
+        guard ffmpegInstallation != nil else {
+            return .ffmpegUnavailable
+        }
+        let statuses = Dictionary(uniqueKeysWithValues: project.clips.map { clip in
+            (clip.id, stabilizationStatus(for: clip, in: project))
+        })
+        do {
+            try TimelineExportReadinessValidator().validate(
+                project: project,
+                mediaURLs: resolvedMediaURLs,
+                stabilizationStatuses: statuses
+            )
+            return nil
+        } catch let error as TimelineExportReadinessError {
+            return error
+        } catch {
+            return .invalidTimeline(error.localizedDescription)
+        }
+    }
+
+    private func report(_ error: Error, phase: String) {
+        let message = error.localizedDescription
+        errorMessage = message
+            + "\n\nIf the problem continues, choose Diagnostics → Copy Diagnostics and share the result."
+        diagnostics.append(
+            level: "ERROR",
+            sessionID: project?.id.uuidString ?? "app",
+            phase: phase,
+            event: "operation.failed",
+            fields: [
+                "error_type": String(reflecting: type(of: error)),
+                "message": message,
+                "project_path": fileURL?.path ?? "<unsaved>",
+            ]
+        )
+    }
+
+    private func logProjectSaved(to url: URL, kind: String) {
+        diagnostics.append(
+            level: "INFO",
+            sessionID: project?.id.uuidString ?? "app",
+            phase: "project-save",
+            event: "project.saved",
+            fields: [
+                "kind": kind,
+                "project_path": url.path,
+            ]
+        )
     }
 
 }

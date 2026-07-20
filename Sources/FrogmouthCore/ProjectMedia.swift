@@ -14,11 +14,18 @@ public struct MissingMediaSource: Equatable, Sendable {
 public struct ProjectMediaValidationIssue: Equatable, Sendable {
     public let assetID: MediaAsset.ID
     public let path: String
+    public let affectedClipIDs: [TimelineClip.ID]
     public let reason: String
 
-    public init(assetID: MediaAsset.ID, path: String, reason: String) {
+    public init(
+        assetID: MediaAsset.ID,
+        path: String,
+        affectedClipIDs: [TimelineClip.ID] = [],
+        reason: String
+    ) {
         self.assetID = assetID
         self.path = path
+        self.affectedClipIDs = affectedClipIDs
         self.reason = reason
     }
 }
@@ -36,15 +43,16 @@ public enum ProjectMediaError: LocalizedError, Equatable, Sendable {
         switch self {
         case let .missingSources(sources):
             let paths = sources.map { source in
-                source.attemptedPaths.joined(separator: " or ")
+                "Media \(source.assetID.uuidString): "
+                    + source.attemptedPaths.joined(separator: " or ")
             }.joined(separator: "\n")
             return "The project cannot be opened because these source files are missing:\n\(paths)\nRestore the files at one of the listed paths and try again."
         case let .fingerprintFailed(path, errorCode):
-            return "frogmouth could not inspect the file identity for \(path) (system error \(errorCode))."
+            return "frogmouth could not inspect the file identity for \(path) (system error \(errorCode)). Check that the file is readable and try again."
         case let .notRegularFile(path):
-            return "The media path is not a regular file: \(path)"
+            return "The media path is not a regular file: \(path). Choose a video file rather than a folder or special file."
         case let .invalidDimensions(path, width, height):
-            return "The media has invalid dimensions \(width)×\(height): \(path)"
+            return "The media has invalid dimensions \(width)×\(height): \(path). Choose a readable video with a valid picture size."
         case let .incompatibleColour(path, mismatches):
             let details = mismatches.map { mismatch in
                 let property = mismatch.property
@@ -52,10 +60,15 @@ public enum ProjectMediaError: LocalizedError, Equatable, Sendable {
             }.joined(separator: ", ")
             return "\(path) cannot be added because its colour metadata does not match the timeline: \(details). frogmouth does not convert colour spaces yet. Choose a clip with matching colour metadata."
         case let .invalidChangedSources(issues):
-            let details = issues.map { "\($0.path): \($0.reason)" }.joined(separator: "\n")
+            let details = issues.map { issue in
+                let clips = issue.affectedClipIDs.isEmpty
+                    ? "no timeline clips"
+                    : "clips " + issue.affectedClipIDs.map(\.uuidString).joined(separator: ", ")
+                return "Media \(issue.assetID.uuidString) at \(issue.path) (\(clips)): \(issue.reason)"
+            }.joined(separator: "\n")
             return "The project cannot be opened because changed source files invalidate existing edits:\n\(details)\nFix or restore the listed files and try again."
         case let .invalidProject(reason):
-            return "The project cannot be opened because its timeline is invalid: \(reason)"
+            return "The project cannot be opened because its timeline is invalid: \(reason) Restore a valid project file and try again."
         }
     }
 }
@@ -353,6 +366,9 @@ public struct ProjectOpenValidator: Sendable {
                 issues.append(ProjectMediaValidationIssue(
                     assetID: asset.id,
                     path: url.path,
+                    affectedClipIDs: candidate.clips
+                        .filter { $0.assetID == asset.id }
+                        .map(\.id),
                     reason: "Reinspection failed: \(error.localizedDescription)"
                 ))
             }
@@ -385,7 +401,8 @@ public struct ProjectOpenValidator: Sendable {
                 issues.append(ProjectMediaValidationIssue(
                     assetID: asset.id,
                     path: url.path,
-                    reason: "Clip \(clip.id.uuidString): \(error.localizedDescription)"
+                    affectedClipIDs: [clip.id],
+                    reason: error.localizedDescription
                 ))
             }
         }

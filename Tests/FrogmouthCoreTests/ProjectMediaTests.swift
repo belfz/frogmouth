@@ -156,7 +156,10 @@ import Testing
         }
         #expect(issues.count == 1)
         #expect(issues[0].path == mediaURL.path)
-        #expect(issues[0].reason.contains(clip.id.uuidString))
+        #expect(issues[0].assetID == assetID)
+        #expect(issues[0].affectedClipIDs == [clip.id])
+        #expect(error.errorDescription?.contains(assetID.uuidString) == true)
+        #expect(error.errorDescription?.contains(clip.id.uuidString) == true)
         #expect(error.errorDescription?.contains("Fix or restore") == true)
     }
     #expect(project.mediaLibrary[0].inspected == oldFacts)

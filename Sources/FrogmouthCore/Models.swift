@@ -214,23 +214,23 @@ public enum FrogmouthError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .ffmpegNotFound:
-            "A supported FFmpeg installation was not found."
+            "A supported FFmpeg installation was not found. Install FFmpeg, restart frogmouth, and try again."
         case let .unsupportedFFmpeg(message):
-            "This FFmpeg installation is unsupported: \(message)"
+            "This FFmpeg installation is unsupported: \(message) Install a supported FFmpeg version, restart frogmouth, and try again."
         case let .unsupportedMedia(message):
-            "The video cannot be opened: \(message)"
+            "The video cannot be opened: \(message) Choose a readable video file and try again."
         case let .incompatibleColour(message):
             message
         case .invalidTrimRange:
-            "The selected trim range is invalid."
+            "The selected trim range is invalid. Move the trim handles to leave at least one frame, then try again."
         case let .processingFailed(message):
-            "FFmpeg processing failed: \(message)"
+            "FFmpeg processing failed: \(message) Retry the operation; if it fails again, copy the diagnostics for investigation."
         case .cancelled:
             "Processing was cancelled."
         case let .outputValidationFailed(message):
-            "The exported file failed validation: \(message)"
+            "The exported file failed validation: \(message) The previous export was left unchanged; retry or copy the diagnostics for investigation."
         case let .fileOperationFailed(message):
-            "A file operation failed: \(message)"
+            "A file operation failed: \(message) Check that the path is writable and has enough free space, then try again."
         }
     }
 }

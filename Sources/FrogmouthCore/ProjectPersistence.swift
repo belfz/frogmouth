@@ -13,11 +13,11 @@ public enum ProjectDocumentError: LocalizedError, Equatable, Sendable {
         case .firstSaveLocationRequired:
             "Choose a location for this untitled project before saving."
         case let .readFailed(path, reason):
-            "The project could not be read from \(path): \(reason)"
+            "The project could not be read from \(path): \(reason) Restore a valid, readable .frogmouth file and try again."
         case let .encodingFailed(reason):
-            "The project could not be encoded as JSON: \(reason)"
+            "The project could not be encoded as JSON: \(reason) The existing project file was left unchanged; retry or copy the diagnostics for investigation."
         case let .writeFailed(path, errorCode):
-            "The project could not be saved to \(path) (system error \(errorCode)). The previous file was left unchanged."
+            "The project could not be saved to \(path) (system error \(errorCode)). The previous file was left unchanged. Check write permission and free space, then try again."
         case .saveInProgress:
             "Wait for the current project save to finish before editing."
         }

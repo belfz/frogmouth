@@ -1,6 +1,137 @@
 import Darwin
 import Foundation
 
+public struct TimelineExportSourceIssue: Equatable, Sendable {
+    public let clipNumber: Int
+    public let clipID: TimelineClip.ID
+    public let assetID: MediaAsset.ID
+    public let path: String
+
+    public init(
+        clipNumber: Int,
+        clipID: TimelineClip.ID,
+        assetID: MediaAsset.ID,
+        path: String
+    ) {
+        self.clipNumber = clipNumber
+        self.clipID = clipID
+        self.assetID = assetID
+        self.path = path
+    }
+}
+
+public struct TimelineExportStaleClipIssue: Equatable, Sendable {
+    public let clipNumber: Int
+    public let clipID: TimelineClip.ID
+    public let reason: StabilizationStaleReason
+
+    public init(
+        clipNumber: Int,
+        clipID: TimelineClip.ID,
+        reason: StabilizationStaleReason
+    ) {
+        self.clipNumber = clipNumber
+        self.clipID = clipID
+        self.reason = reason
+    }
+}
+
+public enum TimelineExportReadinessError: LocalizedError, Equatable, Sendable {
+    case ffmpegUnavailable
+    case invalidTimeline(String)
+    case missingSources([TimelineExportSourceIssue])
+    case stabilizationValidationPending([TimelineExportStaleClipIssue])
+    case staleStabilization([TimelineExportStaleClipIssue])
+
+    public var errorDescription: String? {
+        switch self {
+        case .ffmpegUnavailable:
+            "Timeline export requires the supported FFmpeg installation. Install or repair FFmpeg, then restart frogmouth and try again."
+        case let .invalidTimeline(reason):
+            "The timeline cannot be exported: \(reason) Fix the listed timeline problem and try again."
+        case let .missingSources(issues):
+            "The timeline cannot be exported because these source files are unavailable:\n"
+                + issues.map(Self.describe).joined(separator: "\n")
+                + "\nRestore the listed files at their full paths, reopen the project if needed, and try again."
+        case let .stabilizationValidationPending(issues):
+            "frogmouth is still checking stabilization for:\n"
+                + issues.map(Self.describe).joined(separator: "\n")
+                + "\nWait for validation to finish, then try exporting again."
+        case let .staleStabilization(issues):
+            "The timeline cannot be exported because stabilization needs updating:\n"
+                + issues.map(Self.describe).joined(separator: "\n")
+                + "\nSelect each listed clip, choose Update Stabilization, and try exporting again."
+        }
+    }
+
+    private static func describe(_ issue: TimelineExportSourceIssue) -> String {
+        "Clip \(issue.clipNumber) [\(issue.clipID.uuidString)], media \(issue.assetID.uuidString): \(issue.path)"
+    }
+
+    private static func describe(_ issue: TimelineExportStaleClipIssue) -> String {
+        "Clip \(issue.clipNumber) [\(issue.clipID.uuidString)]: \(issue.reason.localizedDescription)"
+    }
+}
+
+public struct TimelineExportReadinessValidator: Sendable {
+    public init() {}
+
+    public func validate(
+        project: ProjectState,
+        mediaURLs: [MediaAsset.ID: URL],
+        stabilizationStatuses: [TimelineClip.ID: StabilizationStatus]
+    ) throws {
+        guard !project.clips.isEmpty else {
+            throw TimelineExportReadinessError.invalidTimeline("The timeline is empty.")
+        }
+        do {
+            _ = try TimelineIndex(project: project)
+        } catch {
+            throw TimelineExportReadinessError.invalidTimeline(error.localizedDescription)
+        }
+
+        let missingSources = project.clips.enumerated().compactMap { index, clip in
+            let asset = project.mediaLibrary.first(where: { $0.id == clip.assetID })
+            let url = mediaURLs[clip.assetID]
+            guard let url, FileManager.default.fileExists(atPath: url.path) else {
+                return TimelineExportSourceIssue(
+                    clipNumber: index + 1,
+                    clipID: clip.id,
+                    assetID: clip.assetID,
+                    path: url?.path ?? asset?.path.absoluteFallback ?? "<unknown path>"
+                )
+            }
+            return nil
+        }
+        guard missingSources.isEmpty else {
+            throw TimelineExportReadinessError.missingSources(missingSources)
+        }
+
+        var pending: [TimelineExportStaleClipIssue] = []
+        var stale: [TimelineExportStaleClipIssue] = []
+        for (index, clip) in project.clips.enumerated() where !clip.stabilizationPasses.isEmpty {
+            let status = stabilizationStatuses[clip.id] ?? .stale(.validationPending)
+            guard case let .stale(reason) = status else { continue }
+            let issue = TimelineExportStaleClipIssue(
+                clipNumber: index + 1,
+                clipID: clip.id,
+                reason: reason
+            )
+            if reason == .validationPending {
+                pending.append(issue)
+            } else {
+                stale.append(issue)
+            }
+        }
+        if !stale.isEmpty {
+            throw TimelineExportReadinessError.staleStabilization(stale)
+        }
+        if !pending.isEmpty {
+            throw TimelineExportReadinessError.stabilizationValidationPending(pending)
+        }
+    }
+}
+
 public struct TimelineExportDestinationSuggestion: Equatable, Sendable {
     public let directoryURL: URL
     public let filename: String
@@ -406,17 +537,20 @@ public final class TimelineExporter: @unchecked Sendable {
     private let inspector: any MediaInspecting
     private let finalizer: any TimelineExportFileFinalizing
     private let creationDate: @Sendable () -> Date
+    private let diagnostics: DiagnosticLogStore?
 
     public init(
         runner: any FFmpegExecuting,
         inspector: any MediaInspecting = MediaInspector(),
         finalizer: any TimelineExportFileFinalizing = AtomicTimelineExportFileFinalizer(),
-        creationDate: @escaping @Sendable () -> Date = Date.init
+        creationDate: @escaping @Sendable () -> Date = Date.init,
+        diagnostics: DiagnosticLogStore? = nil
     ) {
         self.runner = runner
         self.inspector = inspector
         self.finalizer = finalizer
         self.creationDate = creationDate
+        self.diagnostics = diagnostics
     }
 
     public func export(
@@ -425,6 +559,11 @@ public final class TimelineExporter: @unchecked Sendable {
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> TimelineExportResult {
         let plan = try TimelineRenderPlanner().plan(request.renderRequest)
+        diagnostics?.appendTimelineRenderPlan(
+            plan,
+            destinationURL: request.destinationURL,
+            sessionID: request.sessionID
+        )
         var sourceMetadata: [[String: String]] = []
         for input in plan.inputs.sorted(by: { $0.index < $1.index }) {
             try Task.checkCancellation()
@@ -434,6 +573,11 @@ public final class TimelineExporter: @unchecked Sendable {
             projectName: request.renderRequest.project.name,
             sourceMetadata: sourceMetadata,
             creationDate: creationDate()
+        )
+        diagnostics?.appendTimelineMetadata(
+            metadata,
+            sourceMetadata: sourceMetadata,
+            sessionID: request.sessionID
         )
         let temporaryURL = Self.temporaryURL(for: request.destinationURL)
         defer { try? FileManager.default.removeItem(at: temporaryURL) }
@@ -459,8 +603,30 @@ public final class TimelineExporter: @unchecked Sendable {
             metadata: metadata,
             encoding: encoding
         )
+        diagnostics?.append(
+            level: "INFO",
+            sessionID: request.sessionID,
+            phase: "timeline-export",
+            event: "output.validation",
+            fields: [
+                "result": "passed",
+                "temporary_path": temporaryURL.path,
+                "duration": output.exactDuration.diagnosticRational,
+                "dimensions": "\(output.width)x\(output.height)",
+                "frame_rate": output.exactFrameRate.diagnosticRational,
+                "video_codec": output.videoCodec,
+                "audio_codec": output.audioCodec ?? "<none>",
+            ]
+        )
         try Task.checkCancellation()
         try finalizer.finalize(temporaryURL: temporaryURL, destinationURL: request.destinationURL)
+        diagnostics?.append(
+            level: "INFO",
+            sessionID: request.sessionID,
+            phase: "timeline-export",
+            event: "output.finalized",
+            fields: ["destination_path": request.destinationURL.path]
+        )
         return TimelineExportResult(
             destinationURL: request.destinationURL,
             metadata: metadata

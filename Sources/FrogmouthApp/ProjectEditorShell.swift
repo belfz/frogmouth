@@ -94,8 +94,10 @@ struct ProjectEditorShell: View {
                 Button(action: document.presentTimelineExportPanel) {
                     Label("Export Timeline", systemImage: "square.and.arrow.up")
                 }
-                .disabled(!document.canExportTimeline)
-                .help("Export the complete timeline")
+                .disabled(!document.canRequestTimelineExport)
+                .help(document.canExportTimeline
+                      ? "Export the complete timeline"
+                      : "Show why the timeline cannot be exported")
 
                 Button(action: document.revealLastExport) {
                     Label("Reveal Export", systemImage: "magnifyingglass")

@@ -62,13 +62,13 @@ public enum StabilizationStaleReason: LocalizedError, Equatable, Sendable {
         case .validationPending:
             "Checking stabilization cache compatibility."
         case let .mediaMissing(assetID):
-            "The stabilized clip references missing media \(assetID.uuidString)."
+            "The stabilized clip references missing media \(assetID.uuidString). Restore the source file, reopen the project, then update stabilization."
         case let .duplicateEffectID(effectID):
-            "Stabilization pass \(effectID.uuidString) appears more than once."
+            "Stabilization pass \(effectID.uuidString) appears more than once. Update stabilization for this clip."
         case let .unsupportedMode(effectID, mode):
-            "Stabilization pass \(effectID.uuidString) uses unsupported mode \(mode.rawValue)."
+            "Stabilization pass \(effectID.uuidString) uses unsupported mode \(mode.rawValue). Update stabilization for this clip."
         case let .invalidAnalysisCoverage(effectID):
-            "Stabilization pass \(effectID.uuidString) has invalid analysis coverage."
+            "Stabilization pass \(effectID.uuidString) has invalid analysis coverage. Update stabilization for this clip."
         case let .nonNestedAnalysisCoverage(parent, child):
             "Stabilization pass \(child.uuidString) extends outside preceding pass \(parent.uuidString). Update stabilization."
         case let .clipOutsideAnalysisCoverage(effectID, _, _):
@@ -76,7 +76,7 @@ public enum StabilizationStaleReason: LocalizedError, Equatable, Sendable {
         case let .processingRevisionChanged(effectID, analyzedWith, current):
             "Stabilization pass \(effectID.uuidString) was processed with revision \(analyzedWith), but this build requires revision \(current). Update stabilization."
         case let .artifactUnavailable(effectID, kind, reason):
-            "The \(kind.rawValue) cache for stabilization pass \(effectID.uuidString) is stale: \(reason.localizedDescription)"
+            "The \(kind.rawValue) cache for stabilization pass \(effectID.uuidString) is stale: \(reason.localizedDescription) Update stabilization for this clip."
         }
     }
 }

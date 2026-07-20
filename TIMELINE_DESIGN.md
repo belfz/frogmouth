@@ -477,6 +477,15 @@ User-facing errors must aggregate where useful:
 - Invalid ranges or changed source files identify the asset and affected clips.
 - Save/export failures retain the previous project/final output atomically.
 
+Implemented in T20: diagnostics use sorted, one-line structured events for the project
+decision graph. A snapshot records the schema/project identity, timeline format, media facts,
+resolved and recorded full paths, clips, exact rational ranges, and stabilization passes.
+Separate events capture commands, cache keys and hit/stale reasons, playback-composition
+generations, normalized export inputs/filter decisions, metadata provenance, FFmpeg process
+outcomes, and atomic finalization. The diagnostics intentionally contain no media bytes.
+User-facing failures provide an immediate recovery action and point to Diagnostics → Copy
+Diagnostics when further investigation is needed.
+
 ## 12. Verification and acceptance criteria
 
 ### Unit and schema tests

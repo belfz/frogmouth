@@ -401,17 +401,27 @@ same volume; validation failure and cancellation remove only the hidden temporar
 
 Dependencies: T08, T09, T15, T17, T19.
 
-- [ ] Log project/schema IDs, exact ranges, media/clip IDs, cache keys/hits/misses, composition builds, render plans, and metadata decisions.
-- [ ] Aggregate missing-source errors.
-- [ ] Explain incompatible colour properties.
-- [ ] List stale clips and update guidance.
-- [ ] Report invalid changed-source ranges without modifying the project.
-- [ ] Keep Copy Diagnostics and Reveal Logs useful with full paths.
+- [x] Log project/schema IDs, exact ranges, media/clip IDs, cache keys/hits/misses, composition builds, render plans, and metadata decisions.
+- [x] Aggregate missing-source errors.
+- [x] Explain incompatible colour properties.
+- [x] List stale clips and update guidance.
+- [x] Report invalid changed-source ranges without modifying the project.
+- [x] Keep Copy Diagnostics and Reveal Logs useful with full paths.
 
 Acceptance:
 
 - A diagnostics dump is sufficient to reconstruct the project decision graph without containing media bytes.
 - Every major failure explains what the user can do next.
+
+Implementation note: diagnostics now record sorted, one-line structured events for project
+snapshots and edit commands, exact rational source ranges, media/clip/effect UUIDs, cache
+identities and lookup outcomes, AVFoundation composition builds, normalized FFmpeg render
+plans, metadata provenance, process launches, and atomic save/export outcomes. Values retain
+full filesystem paths and escape embedded line breaks so Copy Diagnostics remains directly
+useful in an AI debugging session; the log contains decisions and media facts, never media
+bytes. Project-open and export readiness validation aggregate all affected sources or clips,
+and failed changed-source validation reports affected IDs while leaving the decoded project
+unchanged.
 
 ### T21 — Meet the performance and accessibility target
 

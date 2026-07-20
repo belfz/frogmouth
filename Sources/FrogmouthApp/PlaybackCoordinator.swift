@@ -18,8 +18,10 @@ final class PlaybackCoordinator: ObservableObject {
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var desiredFrame: Int64 = 0
+    private let diagnostics: DiagnosticLogStore?
 
-    init() {
+    init(diagnostics: DiagnosticLogStore? = nil) {
+        self.diagnostics = diagnostics
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(value: 1, timescale: 30),
             queue: .main
@@ -42,6 +44,12 @@ final class PlaybackCoordinator: ObservableObject {
         errorMessage = nil
 
         guard let project, !project.clips.isEmpty else {
+            diagnostics?.append(
+                level: "INFO",
+                sessionID: project?.id.uuidString ?? "app",
+                phase: "playback-composition",
+                event: "composition.cleared"
+            )
             isBuilding = false
             isPlaying = false
             segmentMap = nil
@@ -54,6 +62,7 @@ final class PlaybackCoordinator: ObservableObject {
         }
 
         let generation = buildGeneration
+        let startedAt = Date()
         let shouldResume = player.timeControlStatus == .playing
         player.pause()
         isPlaying = false
@@ -62,6 +71,19 @@ final class PlaybackCoordinator: ObservableObject {
             project: project,
             mediaURLs: mediaURLs,
             clipSourceOverrides: clipSourceOverrides
+        )
+        diagnostics?.append(
+            level: "INFO",
+            sessionID: project.id.uuidString,
+            phase: "playback-composition",
+            event: "composition.build-started",
+            fields: [
+                "generation": generation.uuidString,
+                "clip_count": String(project.clips.count),
+                "media_url_count": String(mediaURLs.count),
+                "stabilized_override_count": String(clipSourceOverrides.count),
+                "preserving_frame": String(preservingFrame),
+            ]
         )
 
         buildTask = Task { [weak self] in
@@ -81,6 +103,19 @@ final class PlaybackCoordinator: ObservableObject {
                 self.observeEnd(of: item)
                 self.player.replaceCurrentItem(with: item)
                 self.isBuilding = false
+                self.diagnostics?.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "playback-composition",
+                    event: "composition.build-completed",
+                    fields: [
+                        "generation": generation.uuidString,
+                        "segment_count": String(built.segmentMap.segments.count),
+                        "total_frames": String(built.segmentMap.totalFrames),
+                        "frame_rate": built.segmentMap.timelineFrameRate.diagnosticRational,
+                        "elapsed_ms": String(Int(Date().timeIntervalSince(startedAt) * 1_000)),
+                    ]
+                )
                 self.seek(toFrame: self.desiredFrame)
                 if shouldResume {
                     self.player.play()
@@ -88,6 +123,13 @@ final class PlaybackCoordinator: ObservableObject {
                 }
             } catch is CancellationError {
                 // A newer project state superseded this composition.
+                self?.diagnostics?.append(
+                    level: "INFO",
+                    sessionID: project.id.uuidString,
+                    phase: "playback-composition",
+                    event: "composition.build-cancelled",
+                    fields: ["generation": generation.uuidString]
+                )
             } catch {
                 guard let self, self.buildGeneration == generation else { return }
                 self.isBuilding = false
@@ -97,6 +139,18 @@ final class PlaybackCoordinator: ObservableObject {
                 self.removeEndObserver()
                 self.player.replaceCurrentItem(with: nil)
                 self.errorMessage = error.localizedDescription
+                    + " If the problem continues, choose Diagnostics → Copy Diagnostics and share the result."
+                self.diagnostics?.append(
+                    level: "ERROR",
+                    sessionID: project.id.uuidString,
+                    phase: "playback-composition",
+                    event: "composition.build-failed",
+                    fields: [
+                        "generation": generation.uuidString,
+                        "error_type": String(reflecting: type(of: error)),
+                        "message": error.localizedDescription,
+                    ]
+                )
             }
         }
     }
