@@ -1,8 +1,8 @@
 # frogmouth — single-track timeline design
 
-Status: proposed implementation plan following the July 2026 design interview.
+Status: implemented first-timeline-release contract following the July 2026 design interview.
 
-This document describes the planned evolution from frogmouth's current single-clip, session-only editor into a lightweight, project-based editor with one gapless sequence of clips. The existing [v1 technical design](TECHNICAL_DESIGN.md) remains the contract for the currently implemented application. The ordered execution backlog is in [TIMELINE_IMPLEMENTATION_TASKS.md](TIMELINE_IMPLEMENTATION_TASKS.md).
+This document describes frogmouth's active lightweight, project-based editor with one gapless sequence of clips. The former session-only design is retained only as an [archived historical record](TECHNICAL_DESIGN.md). The ordered implementation history and deferred backlog are in [TIMELINE_IMPLEMENTATION_TASKS.md](TIMELINE_IMPLEMENTATION_TASKS.md).
 
 ## 1. Product boundary
 
@@ -321,6 +321,23 @@ The T17 processing path is transactional at the project boundary. **Apply Steady
 
 Processing looks up each artifact before running FFmpeg, so reopening a project, undoing, redoing, splitting, duplicating, or inward-trimming can reuse compatible results. A valid descendant maps its original source range into the final proxy relative to that pass's analysis start; a stale or unresolved clip continues previewing from its original source. Trimming never launches analysis. **Update Stabilization** is the explicit repair action: it retains pass IDs and order, expands every pass just enough to cover the current clip, updates the processing revision, and regenerates only cache misses. The blocking progress sheet remains cancellable, and the project command replacing the pass stack is recorded only after all required artifacts succeed. Cancellation or failure therefore preserves the previous project decision and any previously committed cache manifests; unreferenced newly completed artifacts remain disposable cache data.
 
+### First timeline release compatibility record
+
+| Compatibility boundary | Release value | Behavior when it changes |
+| --- | ---: | --- |
+| `.frogmouth` JSON schema | `1` | Newer schemas are refused before partial decode; older schemas require an explicit sequential migration. |
+| Cache manifest schema | `1` | Unsupported manifests are disposable stale cache entries and are rebuilt on demand. |
+| Stabilization processing revision | `1` | Existing passes become stale and require **Update Stabilization**. |
+| Original-source thumbnail processing revision | `1` | Existing thumbnails miss the new identity and are regenerated lazily. |
+
+Stabilization identities also include the detected FFmpeg/libvidstab tool revision: FFmpeg's
+version line, executable size/modification fingerprint, and required-filter marker. Changing
+that value invalidates stabilization artifacts without changing project JSON. Cache files are
+never migrated or treated as user documents; they may always be deleted and rebuilt. These
+release values are pinned by `firstTimelineReleaseCompatibilityRevisionsAreStable` so changing
+one requires an intentional schema, migration, or cache-invalidation decision and matching
+documentation.
+
 ### Transform alignment after split — validated decision
 
 `vidstabdetect` ASCII rows contain frame-relative local-motion observations. `vidstabtransform` integrates and smooths those observations over the complete input domain. A child produced by splitting an analyzed range therefore cannot seek to its own source start and consume a sliced/renumbered parent `.trf`: both the prior integrated path and surrounding smoothing window would change.
@@ -515,9 +532,9 @@ Diagnostics when further investigation is needed.
 
 On the target Apple-silicon/macOS environment, a project with 25 imported 4K sources, 50 clips, and a 30-minute timeline must remain responsive after lazy thumbnails are cached. Measure project open, composition rebuild, scroll/zoom, trim feedback, memory, cache size, and export planning separately. Stabilization and export duration remain media-dependent and are not hidden behind UI responsiveness claims.
 
-## 13. Delivery strategy
+## 13. Delivery status
 
-Implement this as incremental vertical slices, not a big-bang replacement. Add exact-time and project-domain types beside the current single-clip model; preserve a green build and the usable v1 editor until project loading, one-clip playback, timeline editing, stabilization, and export have each crossed their acceptance gate. Remove the legacy `EditState`/`TrimScrubber` flow only after the new single-clip path has parity.
+The timeline was implemented as incremental vertical slices while the original editor remained available as a parity reference. After project loading, one-clip playback, timeline editing, stabilization, export, diagnostics, and cancellation crossed their acceptance gates, the legacy `EditorViewModel`/`EditState`/`TrimScrubber` architecture and its separate FFmpeg command path were removed in T22. The active app now has one document model and one render architecture.
 
 The dependency-aware task order and per-task acceptance checks are in [TIMELINE_IMPLEMENTATION_TASKS.md](TIMELINE_IMPLEMENTATION_TASKS.md).
 

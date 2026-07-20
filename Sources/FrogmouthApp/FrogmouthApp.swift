@@ -3,12 +3,12 @@ import SwiftUI
 
 @main
 struct FrogmouthApp: App {
-    @StateObject private var model: EditorViewModel
+    @StateObject private var application: ApplicationViewModel
     @StateObject private var document: ProjectDocumentViewModel
 
     init() {
         let diagnostics = DiagnosticLogStore()
-        _model = StateObject(wrappedValue: EditorViewModel(diagnostics: diagnostics))
+        _application = StateObject(wrappedValue: ApplicationViewModel(diagnostics: diagnostics))
         _document = StateObject(wrappedValue: ProjectDocumentViewModel(
             diagnostics: diagnostics
         ))
@@ -16,9 +16,9 @@ struct FrogmouthApp: App {
 
     var body: some Scene {
         WindowGroup("frogmouth") {
-            RootView(model: model, document: document)
+            RootView(application: application, document: document)
                 .frame(minWidth: 900, minHeight: 680)
-                .task { await model.bootstrap() }
+                .task { await application.bootstrap() }
                 .onOpenURL(perform: document.openExternalURL)
         }
         .windowStyle(.titleBar)
@@ -64,8 +64,8 @@ struct FrogmouthApp: App {
                     .disabled(!document.canEditSelectedClip)
             }
             CommandMenu("Diagnostics") {
-                Button("Copy Diagnostics") { model.copyDiagnostics() }
-                Button("Reveal Logs in Finder") { model.revealLogs() }
+                Button("Copy Diagnostics") { application.copyDiagnostics() }
+                Button("Reveal Logs in Finder") { application.revealLogs() }
             }
         }
     }

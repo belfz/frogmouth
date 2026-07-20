@@ -1,8 +1,8 @@
 # frogmouth — single-track timeline implementation tasks
 
-This is the ordered execution backlog for [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md). Tasks are deliberately sized as reviewable increments. Check a task only when its acceptance checks pass; do not mark an entire phase complete because its UI appears superficially functional.
+This is the ordered implementation record and deferred backlog for [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md). Tasks are deliberately sized as reviewable increments. Check a task only when its acceptance checks pass; do not mark an entire phase complete because its UI appears superficially functional.
 
-## Working rules
+## Working rules used during delivery
 
 - Keep the current single-clip application runnable until the new path reaches one-clip feature parity.
 - Put pure domain, timing, persistence, and render-planning logic in `FrogmouthCore`.
@@ -444,11 +444,11 @@ Acceptance:
 
 Dependencies: T21.
 
-- [ ] Prove one-source/one-clip trim, stacked stabilization, preview, export, logs, and cancellation parity.
-- [ ] Remove or adapt legacy `EditState`, `TrimRange`, `TrimScrubber`, and one-source `EditorViewModel` code only after parity.
-- [ ] Update `TECHNICAL_DESIGN.md` status and route future readers to the timeline design.
-- [ ] Update README development/use instructions and the future-work list.
-- [ ] Record the JSON schema and cache compatibility revision used by the release.
+- [x] Prove one-source/one-clip trim, stacked stabilization, preview, export, logs, and cancellation parity.
+- [x] Remove or adapt legacy `EditState`, `TrimRange`, `TrimScrubber`, and one-source `EditorViewModel` code only after parity.
+- [x] Update `TECHNICAL_DESIGN.md` status and route future readers to the timeline design.
+- [x] Update README development/use instructions and the future-work list.
+- [x] Record the JSON schema and cache compatibility revision used by the release.
 
 Acceptance:
 
