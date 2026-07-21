@@ -59,7 +59,6 @@ frogmouth verifies FFmpeg only at startup. When setup is required, install the d
 ## Future development ideas / to do
 
 - H.264 compatibility export for recipients or older hardware/software that cannot reliably decode HEVC; it needs more bitrate for comparable quality.
-- Investigate oversized timeline exports from MOV sources and improve automatic codec/bitrate decisions so trimmed outputs do not unexpectedly exceed their source files while retaining comparable quality.
 - Basic colour controls: exposure, white balance, and contrast while preserving a no-adjustment default.
 - A stabilization-strength slider after preset tuning is validated.
 - Before/after stabilization comparison.

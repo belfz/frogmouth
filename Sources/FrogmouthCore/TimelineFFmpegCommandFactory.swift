@@ -80,6 +80,7 @@ public enum TimelineFFmpegCommandFactory {
             arguments += [
                 "-c:v", "hevc_videotoolbox",
                 "-b:v", String(plan.targetVideoBitrate),
+                "-constant_bit_rate", "true",
                 "-tag:v", "hvc1",
             ]
             if plan.hasAudio {

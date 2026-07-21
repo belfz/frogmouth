@@ -26,6 +26,50 @@ import Testing
     #expect(plan.clips[3].stabilizationPasses.map(\.effectID) == fixture.effects.map(\.id))
 }
 
+@Test func renderPlannerScalesTheFourKBitrateFloorForFullHDMovSources() throws {
+    let rate = try FrameRate(numerator: 30, denominator: 1)
+    let colour = VideoColourMetadata(
+        primaries: nil,
+        transferFunction: nil,
+        matrix: nil,
+        range: nil
+    )
+    let url = URL(fileURLWithPath: "/tmp/trail camera.mov")
+    let asset = syntheticAsset(
+        url: url,
+        rate: rate,
+        frames: 900,
+        width: 1_920,
+        height: 1_080,
+        bitrate: 14_844_567,
+        hasAudio: true,
+        colour: colour
+    )
+    let project = ProjectState(
+        name: "Trail camera",
+        mediaLibrary: [asset],
+        timelineFormat: TimelineFormat(
+            width: 1_920,
+            height: 1_080,
+            frameRate: rate,
+            colour: colour,
+            audioSampleRate: 32_000,
+            audioChannelCount: 1
+        ),
+        clips: [TimelineClip(
+            assetID: asset.id,
+            sourceRange: try frameRange(rate, start: 0, count: 900)
+        )]
+    )
+
+    let plan = try TimelineRenderPlanner().plan(TimelineRenderRequest(
+        project: project,
+        mediaURLs: [asset.id: url]
+    ))
+
+    #expect(plan.targetVideoBitrate == 10_253_906)
+}
+
 @Test func timelineFFmpegSnapshotCoversSpecialPathsRepeatedAssetsSilenceAndStackedPasses() throws {
     let fixture = try makeSyntheticRenderFixture()
     let plan = try TimelineRenderPlanner().plan(fixture.request)
@@ -173,6 +217,8 @@ import Testing
     #expect(graph.contains("fps=fps=60000/1001:round=near"))
     #expect(graph.contains("setpts=N*1001/(60000*TB)"))
     #expect(arguments.contains("hevc_videotoolbox"))
+    let constantBitrateIndex = try #require(arguments.firstIndex(of: "-constant_bit_rate"))
+    #expect(arguments[constantBitrateIndex + 1] == "true")
     #expect(arguments.contains("hvc1"))
     #expect(arguments.contains("aac"))
     #expect(arguments.contains("+faststart"))
@@ -400,6 +446,7 @@ private func syntheticAsset(
     rate: FrameRate,
     frames: Int64,
     width: Int,
+    height: Int = 180,
     bitrate: Int64,
     hasAudio: Bool,
     colour: VideoColourMetadata
@@ -410,7 +457,7 @@ private func syntheticAsset(
         inspected: PersistedMediaFacts(
             duration: try! rate.time(forFrame: frames),
             width: width,
-            height: 180,
+            height: height,
             frameRate: rate,
             videoBitrate: bitrate,
             videoCodec: "h264",
