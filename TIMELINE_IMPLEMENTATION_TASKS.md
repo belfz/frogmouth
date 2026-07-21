@@ -1,8 +1,8 @@
 # frogmouth — single-track timeline implementation tasks
 
-This is the ordered execution backlog for [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md). Tasks are deliberately sized as reviewable increments. Check a task only when its acceptance checks pass; do not mark an entire phase complete because its UI appears superficially functional.
+This is the ordered implementation record and deferred backlog for [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md). Tasks are deliberately sized as reviewable increments. Check a task only when its acceptance checks pass; do not mark an entire phase complete because its UI appears superficially functional.
 
-## Working rules
+## Working rules used during delivery
 
 - Keep the current single-clip application runnable until the new path reaches one-clip feature parity.
 - Put pure domain, timing, persistence, and render-planning logic in `FrogmouthCore`.
@@ -401,28 +401,38 @@ same volume; validation failure and cancellation remove only the hidden temporar
 
 Dependencies: T08, T09, T15, T17, T19.
 
-- [ ] Log project/schema IDs, exact ranges, media/clip IDs, cache keys/hits/misses, composition builds, render plans, and metadata decisions.
-- [ ] Aggregate missing-source errors.
-- [ ] Explain incompatible colour properties.
-- [ ] List stale clips and update guidance.
-- [ ] Report invalid changed-source ranges without modifying the project.
-- [ ] Keep Copy Diagnostics and Reveal Logs useful with full paths.
+- [x] Log project/schema IDs, exact ranges, media/clip IDs, cache keys/hits/misses, composition builds, render plans, and metadata decisions.
+- [x] Aggregate missing-source errors.
+- [x] Explain incompatible colour properties.
+- [x] List stale clips and update guidance.
+- [x] Report invalid changed-source ranges without modifying the project.
+- [x] Keep Copy Diagnostics and Reveal Logs useful with full paths.
 
 Acceptance:
 
 - A diagnostics dump is sufficient to reconstruct the project decision graph without containing media bytes.
 - Every major failure explains what the user can do next.
 
+Implementation note: diagnostics now record sorted, one-line structured events for project
+snapshots and edit commands, exact rational source ranges, media/clip/effect UUIDs, cache
+identities and lookup outcomes, AVFoundation composition builds, normalized FFmpeg render
+plans, metadata provenance, process launches, and atomic save/export outcomes. Values retain
+full filesystem paths and escape embedded line breaks so Copy Diagnostics remains directly
+useful in an AI debugging session; the log contains decisions and media facts, never media
+bytes. Project-open and export readiness validation aggregate all affected sources or clips,
+and failed changed-source validation reports affected IDs while leaving the decoded project
+unchanged.
+
 ### T21 — Meet the performance and accessibility target
 
 Dependencies: T12–T20.
 
-- [ ] Benchmark 25 imported 4K sources, 50 clips, and a 30-minute timeline.
-- [ ] Measure open, autosave, composition rebuild, cached/uncached scroll, zoom, trim feedback, memory, and disk cache.
-- [ ] Move any remaining media/file work off the main actor.
-- [ ] Add accessibility labels/actions for clips, handles, playhead, icons, sidebars, and processing state.
-- [ ] Test keyboard focus even though comprehensive shortcuts are deferred.
-- [ ] Perform human playback/export acceptance tests on real wildlife footage.
+- [x] Benchmark 25 imported 4K sources, 50 clips, and a 30-minute timeline.
+- [x] Measure open, autosave, composition rebuild, cached/uncached scroll, zoom, trim feedback, memory, and disk cache.
+- [x] Move any remaining media/file work off the main actor.
+- [x] Add accessibility labels/actions for clips, handles, playhead, icons, sidebars, and processing state.
+- [x] Test keyboard focus even though comprehensive shortcuts are deferred.
+- [x] Perform human playback/export acceptance tests on real wildlife footage.
 
 Acceptance:
 
@@ -434,11 +444,11 @@ Acceptance:
 
 Dependencies: T21.
 
-- [ ] Prove one-source/one-clip trim, stacked stabilization, preview, export, logs, and cancellation parity.
-- [ ] Remove or adapt legacy `EditState`, `TrimRange`, `TrimScrubber`, and one-source `EditorViewModel` code only after parity.
-- [ ] Update `TECHNICAL_DESIGN.md` status and route future readers to the timeline design.
-- [ ] Update README development/use instructions and the future-work list.
-- [ ] Record the JSON schema and cache compatibility revision used by the release.
+- [x] Prove one-source/one-clip trim, stacked stabilization, preview, export, logs, and cancellation parity.
+- [x] Remove or adapt legacy `EditState`, `TrimRange`, `TrimScrubber`, and one-source `EditorViewModel` code only after parity.
+- [x] Update `TECHNICAL_DESIGN.md` status and route future readers to the timeline design.
+- [x] Update README development/use instructions and the future-work list.
+- [x] Record the JSON schema and cache compatibility revision used by the release.
 
 Acceptance:
 

@@ -13,11 +13,11 @@ public enum ProjectDocumentError: LocalizedError, Equatable, Sendable {
         case .firstSaveLocationRequired:
             "Choose a location for this untitled project before saving."
         case let .readFailed(path, reason):
-            "The project could not be read from \(path): \(reason)"
+            "The project could not be read from \(path): \(reason) Restore a valid, readable .frogmouth file and try again."
         case let .encodingFailed(reason):
-            "The project could not be encoded as JSON: \(reason)"
+            "The project could not be encoded as JSON: \(reason) The existing project file was left unchanged; retry or copy the diagnostics for investigation."
         case let .writeFailed(path, errorCode):
-            "The project could not be saved to \(path) (system error \(errorCode)). The previous file was left unchanged."
+            "The project could not be saved to \(path) (system error \(errorCode)). The previous file was left unchanged. Check write permission and free space, then try again."
         case .saveInProgress:
             "Wait for the current project save to finish before editing."
         }
@@ -175,6 +175,31 @@ public enum ProjectAutosaveResult: Sendable {
     case failed(project: ProjectState, url: URL, error: ProjectDocumentError)
 }
 
+public struct ProjectDocumentPublishedState: Sendable {
+    public let project: ProjectState
+    public let fileURL: URL?
+    public let resolvedMediaURLs: [MediaAsset.ID: URL]
+    public let isModified: Bool
+    public let canUndo: Bool
+    public let canRedo: Bool
+
+    public init(
+        project: ProjectState,
+        fileURL: URL?,
+        resolvedMediaURLs: [MediaAsset.ID: URL],
+        isModified: Bool,
+        canUndo: Bool,
+        canRedo: Bool
+    ) {
+        self.project = project
+        self.fileURL = fileURL
+        self.resolvedMediaURLs = resolvedMediaURLs
+        self.isModified = isModified
+        self.canUndo = canUndo
+        self.canRedo = canRedo
+    }
+}
+
 public actor ProjectAutosaveCoordinator {
     public typealias Completion = @Sendable (ProjectAutosaveResult) async -> Void
 
@@ -308,6 +333,16 @@ public actor ProjectDocumentSession {
     public var canUndo: Bool { editor.history.canUndo }
     public var canRedo: Bool { editor.history.canRedo }
     public var pendingTrim: TrimTransaction? { editor.trimTransaction }
+    public var publishedState: ProjectDocumentPublishedState {
+        ProjectDocumentPublishedState(
+            project: editor.project,
+            fileURL: fileURL,
+            resolvedMediaURLs: resolvedMediaURLs,
+            isModified: editor.project != lastSavedProject,
+            canUndo: editor.history.canUndo,
+            canRedo: editor.history.canRedo
+        )
+    }
 
     public func apply(_ command: ProjectCommand) async throws {
         try ensureNotSaving()

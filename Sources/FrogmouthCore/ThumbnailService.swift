@@ -57,6 +57,25 @@ public struct ThumbnailRequest: Hashable, Sendable {
     }
 }
 
+public enum ThumbnailSizing {
+    /// Keeps zooming from producing a new cache identity for every fractional
+    /// clip width while still providing enough pixels for a Retina timeline.
+    public static func quantizedPixelWidth(
+        displayWidth: Double,
+        backingScale: Double = 2,
+        buckets: [Int] = [160, 320, 640]
+    ) -> Int {
+        let usableBuckets = buckets.filter { $0 > 0 }.sorted()
+        guard !usableBuckets.isEmpty else { return 1 }
+        guard displayWidth.isFinite, backingScale.isFinite,
+              displayWidth > 0, backingScale > 0 else {
+            return usableBuckets[0]
+        }
+        let requested = displayWidth * backingScale
+        return usableBuckets.first { Double($0) >= requested } ?? usableBuckets.last!
+    }
+}
+
 public enum ThumbnailError: LocalizedError, Equatable, Sendable {
     case invalidDimensions(width: Int, height: Int)
     case imageEncodingFailed

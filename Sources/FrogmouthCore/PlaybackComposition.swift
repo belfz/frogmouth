@@ -12,15 +12,15 @@ public enum PlaybackCompositionError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .missingTimelineFormat:
-            "The timeline has no playback format."
+            "The timeline has no playback format. Import a readable video to establish the timeline format."
         case let .missingMediaURL(assetID):
-            "The source file for media \(assetID.uuidString) is unavailable."
+            "The source file for media \(assetID.uuidString) is unavailable. Restore the source file at its recorded path and reopen the project."
         case let .missingVideoTrack(assetID):
-            "The source file for media \(assetID.uuidString) has no readable video track."
+            "The source file for media \(assetID.uuidString) has no readable video track. Restore the original file or replace it with a readable video."
         case .couldNotCreateVideoTrack:
-            "AVFoundation could not create the timeline video track."
+            "AVFoundation could not create the timeline video track. Reopen the project and try again."
         case let .couldNotCreateAudioTrack(clipID):
-            "AVFoundation could not create the audio track for clip \(clipID.uuidString)."
+            "AVFoundation could not create the audio track for clip \(clipID.uuidString). Reopen the project and try again."
         }
     }
 }

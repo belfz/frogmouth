@@ -38,13 +38,13 @@ public enum ClipStabilizationProcessingError: LocalizedError, Equatable, Sendabl
     public var errorDescription: String? {
         switch self {
         case let .clipNotFound(id):
-            "Timeline clip \(id.uuidString) no longer exists."
+            "Timeline clip \(id.uuidString) no longer exists. Select an existing clip and try again."
         case let .mediaNotFound(id):
-            "The source record for media \(id.uuidString) is missing."
+            "The source record for media \(id.uuidString) is missing. Reopen the project or restore the original project file before trying again."
         case let .sourceURLMissing(id):
-            "The source file for media \(id.uuidString) is unavailable."
+            "The source file for media \(id.uuidString) is unavailable. Restore it at its recorded path, reopen the project if needed, and try again."
         case .invalidPassConfiguration:
-            "The stabilization pass configuration is invalid."
+            "The stabilization pass configuration is invalid. Select the clip and update stabilization."
         }
     }
 }

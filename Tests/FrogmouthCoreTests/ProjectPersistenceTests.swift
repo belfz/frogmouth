@@ -3,6 +3,23 @@ import Testing
 
 @testable import FrogmouthCore
 
+@Test func documentPublishesAConsistentUIStateInOneSnapshot() async throws {
+    let session = ProjectDocumentSession.newProject(name: "Snapshot")
+    let asset = try makePersistenceAsset(
+        id: UUID(uuidString: "AAAAAAAA-8700-0000-0000-000000000001")!,
+        path: "/tmp/snapshot.mp4"
+    )
+    try await session.apply(.importMedia(asset))
+
+    let state = await session.publishedState
+    #expect(state.project.mediaLibrary == [asset])
+    #expect(state.fileURL == nil)
+    #expect(state.resolvedMediaURLs.isEmpty)
+    #expect(state.isModified)
+    #expect(state.canUndo)
+    #expect(!state.canRedo)
+}
+
 @Test func atomicProjectSaveReplacesTheDocumentWithoutLeavingTemporaryFiles() async throws {
     let root = try makePersistenceTemporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }

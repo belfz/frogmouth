@@ -51,6 +51,9 @@ struct SequenceTimelineView: View {
             }
             .padding(.vertical, 8)
             .background(Color(nsColor: .controlBackgroundColor))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Timeline editor")
+            .accessibilityIdentifier("timeline-editor")
         }
     }
 
@@ -68,6 +71,7 @@ struct SequenceTimelineView: View {
             Spacer()
             Image(systemName: "minus.magnifyingglass")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Slider(
                 value: Binding(
                     get: { log2(pixelsPerSecond) },
@@ -86,6 +90,7 @@ struct SequenceTimelineView: View {
             .accessibilityLabel("Timeline zoom")
             Image(systemName: "plus.magnifyingglass")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Button("Fit Timeline") {
                 let totalDuration = timelineIndex?.totalDuration ?? .zero
                 if let fitted = try? math.fittedPixelsPerSecond(
@@ -191,6 +196,9 @@ private struct TimelineTrackContent: View {
     private let prefetchWidth = 260.0
 
     var body: some View {
+        let assetsByID = Dictionary(
+            uniqueKeysWithValues: project.mediaLibrary.map { ($0.id, $0) }
+        )
         ZStack(alignment: .topLeading) {
             Color(nsColor: .controlBackgroundColor)
                 .contentShape(Rectangle())
@@ -221,14 +229,16 @@ private struct TimelineTrackContent: View {
                         .offset(y: rulerHeight + 2)
                 }
                 ForEach(timelineIndex.entries, id: \.clipID) { entry in
-                    if let clip = project.clips.first(where: { $0.id == entry.clipID }) {
+                    if project.clips.indices.contains(entry.clipIndex) {
+                        let clip = project.clips[entry.clipIndex]
                         let startX = x(forFrame: entry.startFrame)
                         let width = max(1, x(forFrame: entry.durationFrames))
                         TimelinePresentationClip(
                             document: document,
                             projectID: project.id,
+                            clipNumber: entry.clipIndex + 1,
                             clip: clip,
-                            asset: project.mediaLibrary.first { $0.id == clip.assetID },
+                            asset: assetsByID[clip.assetID],
                             width: width,
                             timelineRate: project.timelineFormat?.frameRate,
                             pixelsPerSecond: pixelsPerSecond,
@@ -247,10 +257,10 @@ private struct TimelineTrackContent: View {
                     }
                 }
 
-                ForEach(Array(boundaryFrames.enumerated()), id: \.offset) { _, frame in
+                ForEach(Array(boundaryFrames.enumerated()), id: \.offset) { boundaryIndex, frame in
                     TimelineDropBoundary(
                         document: document,
-                        insertionIndex: insertionIndex(forBoundaryFrame: frame)
+                        insertionIndex: boundaryIndex
                     )
                     .offset(x: x(forFrame: frame) - 9, y: rulerHeight)
                 }
@@ -281,6 +291,9 @@ private struct TimelineTrackContent: View {
         } isTargeted: {
             isTrackDropTargeted = $0
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Timeline track")
+        .accessibilityHint("Select clips or move the playhead to edit the sequence.")
     }
 
     @ViewBuilder
@@ -299,20 +312,36 @@ private struct TimelineTrackContent: View {
             }
             .offset(x: playheadX - 0.75)
             .allowsHitTesting(false)
+            .accessibilityElement()
             .accessibilityLabel("Playhead")
+            .accessibilityIdentifier("timeline-playhead")
             .accessibilityValue((try? frameRate.timecode(forFrame: document.playheadFrame)) ?? "")
+            .accessibilityHint("Adjust to move by one timeline frame.")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment:
+                    document.setPlayheadFrame(document.playheadFrame + 1)
+                case .decrement:
+                    document.setPlayheadFrame(max(0, document.playheadFrame - 1))
+                @unknown default:
+                    break
+                }
+            }
+            .focusable()
+            .onKeyPress(.leftArrow) {
+                document.setPlayheadFrame(max(0, document.playheadFrame - 1))
+                return .handled
+            }
+            .onKeyPress(.rightArrow) {
+                document.setPlayheadFrame(document.playheadFrame + 1)
+                return .handled
+            }
         }
     }
 
     private var boundaryFrames: [Int64] {
         guard let timelineIndex else { return [0] }
         return timelineIndex.entries.map(\.startFrame) + [timelineIndex.totalFrames]
-    }
-
-    private func insertionIndex(forBoundaryFrame frame: Int64) -> Int {
-        guard let timelineIndex else { return 0 }
-        return timelineIndex.entries.firstIndex(where: { $0.startFrame == frame })
-            ?? timelineIndex.entries.count
     }
 
     private func nearestInsertionIndex(atX locationX: Double) -> Int {
@@ -433,6 +462,7 @@ private struct TimelineRuler: View {
 private struct TimelinePresentationClip: View {
     @ObservedObject var document: ProjectDocumentViewModel
     let projectID: ProjectState.ID
+    let clipNumber: Int
     let clip: TimelineClip
     let asset: MediaAsset?
     let width: Double
@@ -443,6 +473,35 @@ private struct TimelinePresentationClip: View {
     let stabilizationStatus: StabilizationStatus
 
     var body: some View {
+        visualClip
+            .help(filename)
+            .focusable()
+            .onKeyPress(.return) {
+                document.selectClip(clip.id)
+                return .handled
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Timeline clip \(clipNumber): \(filename)")
+            .accessibilityValue(accessibilityValue)
+            .accessibilityHint("Press Return to select. Drag to reorder.")
+            .accessibilityIdentifier("timeline-clip-\(clip.id.uuidString)")
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction(named: "Select clip") {
+                document.selectClip(clip.id)
+            }
+            .accessibilityAction(named: "Move clip earlier") {
+                document.moveClip(clip.id, toBoundaryIndex: max(0, clipNumber - 2))
+            }
+            .accessibilityAction(named: "Move clip later") {
+                document.moveClip(clip.id, toBoundaryIndex: clipNumber + 1)
+            }
+            .accessibilityAction(named: "Delete clip") {
+                document.selectClip(clip.id)
+                document.deleteSelectedClip()
+            }
+    }
+
+    private var visualClip: some View {
         ZStack(alignment: .topLeading) {
             ThumbnailArtwork(
                 service: document.thumbnailService,
@@ -450,6 +509,7 @@ private struct TimelinePresentationClip: View {
                 request: requestsThumbnail ? thumbnailRequest : nil
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityHidden(true)
 
             LinearGradient(
                 colors: [.black.opacity(0.62), .clear],
@@ -489,7 +549,6 @@ private struct TimelinePresentationClip: View {
                 trimHandle(edge: .trailing)
             }
         }
-        .help(filename)
     }
 
     @ViewBuilder
@@ -516,6 +575,18 @@ private struct TimelinePresentationClip: View {
         return URL(fileURLWithPath: asset.path.absoluteFallback).lastPathComponent
     }
 
+    private var accessibilityValue: String {
+        let seconds = Double(clip.sourceRange.duration.value)
+            / Double(clip.sourceRange.duration.timescale)
+        let duration = String(format: "%.2f seconds", seconds)
+        let stabilization = switch stabilizationStatus {
+        case .none: "not stabilized"
+        case .valid: "stabilization current"
+        case .stale: "stabilization needs update"
+        }
+        return "\(duration), \(stabilization), \(isSelected ? "selected" : "not selected")"
+    }
+
     private var thumbnailRequest: ThumbnailRequest? {
         guard let asset else { return nil }
         return try? ThumbnailRequest(
@@ -525,7 +596,7 @@ private struct TimelinePresentationClip: View {
                 ?? URL(fileURLWithPath: asset.path.absoluteFallback),
             frameRate: asset.inspected.frameRate,
             requestedSourceTime: clip.sourceRange.start,
-            pixelWidth: max(80, min(640, Int(width.rounded(.up)) * 2)),
+            pixelWidth: ThumbnailSizing.quantizedPixelWidth(displayWidth: width),
             pixelHeight: 160
         )
     }
@@ -567,6 +638,42 @@ private struct TimelinePresentationClip: View {
         }
         .help(edge == .leading ? "Trim the clip start" : "Trim the clip end")
         .accessibilityLabel(edge == .leading ? "Leading trim handle" : "Trailing trim handle")
+        .accessibilityIdentifier(
+            "timeline-clip-\(clip.id.uuidString)-\(edge == .leading ? "leading" : "trailing")-trim"
+        )
+        .accessibilityValue(trimHandleAccessibilityValue(edge: edge))
+        .accessibilityHint("Adjust to trim by one timeline frame.")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                document.adjustTrimByOneTimelineFrame(clipID: clip.id, edge: edge, delta: 1)
+            case .decrement:
+                document.adjustTrimByOneTimelineFrame(clipID: clip.id, edge: edge, delta: -1)
+            @unknown default:
+                break
+            }
+        }
+        .focusable()
+        .onKeyPress(.leftArrow) {
+            document.adjustTrimByOneTimelineFrame(clipID: clip.id, edge: edge, delta: -1)
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            document.adjustTrimByOneTimelineFrame(clipID: clip.id, edge: edge, delta: 1)
+            return .handled
+        }
+    }
+
+    private func trimHandleAccessibilityValue(edge: ProjectDocumentViewModel.TrimEdge) -> String {
+        guard let asset else { return "Source unavailable" }
+        let time: MediaTime
+        switch edge {
+        case .leading:
+            time = clip.sourceRange.start
+        case .trailing:
+            time = (try? clip.sourceRange.end()) ?? clip.sourceRange.start
+        }
+        return (try? asset.inspected.frameRate.timecode(for: time)) ?? time.diagnosticRational
     }
 
     private func timelineFrameDelta(for horizontalTranslation: Double) -> Int64 {
@@ -615,6 +722,11 @@ private struct TimelineDropBoundary: View {
             isTargeted = $0
         }
         .accessibilityLabel("Insert clip at boundary \(insertionIndex + 1)")
+        .accessibilityHint("Inserts the selected Media Library source at this boundary.")
+        .accessibilityAction(named: "Insert selected source") {
+            guard let assetID = document.selectedAssetID else { return }
+            document.insertAssetOnTimeline(assetID, at: insertionIndex)
+        }
     }
 }
 

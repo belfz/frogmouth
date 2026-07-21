@@ -3,7 +3,7 @@ import Foundation
 public final class DiagnosticLogStore: @unchecked Sendable {
     public let directory: URL
     private let fileURL: URL
-    private let lock = NSLock()
+    private let queue = DispatchQueue(label: "dev.frogmouth.diagnostics", qos: .utility)
     private let formatter = ISO8601DateFormatter()
 
     public init(baseDirectory: URL? = nil) {
@@ -18,7 +18,7 @@ public final class DiagnosticLogStore: @unchecked Sendable {
     }
 
     public func append(level: String, sessionID: String, phase: String, message: String) {
-        lock.withLock {
+        queue.async { [self] in
             let timestamp = formatter.string(from: Date())
             let line = "\(timestamp) [\(level)] session=\(sessionID) phase=\(phase) \(message)\n"
             guard let data = line.data(using: .utf8) else { return }
@@ -35,6 +35,24 @@ public final class DiagnosticLogStore: @unchecked Sendable {
                 try? data.write(to: fileURL, options: .atomic)
             }
         }
+    }
+
+    public func append(
+        level: String,
+        sessionID: String,
+        phase: String,
+        event: String,
+        fields: [String: String] = [:]
+    ) {
+        let components = ["event=\(Self.structuredValue(event))"] + fields
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\(Self.structuredValue($0.value))" }
+        append(
+            level: level,
+            sessionID: sessionID,
+            phase: phase,
+            message: components.joined(separator: " ")
+        )
     }
 
     public func appendProcessLog(
@@ -55,14 +73,36 @@ public final class DiagnosticLogStore: @unchecked Sendable {
     }
 
     public func contents() -> String {
-        lock.withLock {
-            (try? String(contentsOf: fileURL, encoding: .utf8)) ?? "No diagnostics are available."
+        queue.sync {
+            readContents()
         }
+    }
+
+    public func contentsAsync() async -> String {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                continuation.resume(returning: readContents())
+            }
+        }
+    }
+
+    private func readContents() -> String {
+        (try? String(contentsOf: fileURL, encoding: .utf8)) ?? "No diagnostics are available."
     }
 
     private static func shellDisplayQuote(_ value: String) -> String {
         guard value.contains(where: { $0.isWhitespace || "'\"\\".contains($0) }) else { return value }
         return "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private static func structuredValue(_ value: String) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        guard let data = try? encoder.encode(value),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "\"<unencodable>\""
+        }
+        return encoded
     }
 
     private static func systemDescription() -> String {
@@ -80,12 +120,3 @@ public final class DiagnosticLogStore: @unchecked Sendable {
         #endif
     }
 }
-
-private extension NSLock {
-    func withLock<T>(_ body: () throws -> T) rethrows -> T {
-        lock()
-        defer { unlock() }
-        return try body()
-    }
-}
-

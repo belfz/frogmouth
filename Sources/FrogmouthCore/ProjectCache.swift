@@ -188,17 +188,20 @@ public actor ProjectCacheStore {
     private let fileManager: FileManager
     private let keyBuilder: CacheKeyBuilder
     private let writer: any ProjectFileWriting
+    private let diagnostics: DiagnosticLogStore?
 
     public init(
         rootURL: URL = ProjectCacheStore.defaultRootURL,
         fileManager: FileManager = .default,
         keyBuilder: CacheKeyBuilder = CacheKeyBuilder(),
-        writer: any ProjectFileWriting = AtomicProjectFileWriter()
+        writer: any ProjectFileWriting = AtomicProjectFileWriter(),
+        diagnostics: DiagnosticLogStore? = nil
     ) {
         self.rootURL = rootURL.standardizedFileURL
         self.fileManager = fileManager
         self.keyBuilder = keyBuilder
         self.writer = writer
+        self.diagnostics = diagnostics
     }
 
     @discardableResult
@@ -247,12 +250,14 @@ public actor ProjectCacheStore {
         }
 
         removeSupersededArtifacts(in: entryURL, keeping: artifactFilename)
-        return CacheArtifact(
+        let artifact = CacheArtifact(
             key: key,
             url: artifactURL,
             byteCount: Int64(data.count),
             manifest: manifest
         )
+        recordCacheStore(projectID: projectID, artifact: artifact)
+        return artifact
     }
 
     /// Copies a generated artifact into the managed cache without loading the
@@ -307,12 +312,14 @@ public actor ProjectCacheStore {
             }
             try writer.write(manifestData, atomicallyTo: manifestURL)
             removeSupersededArtifacts(in: entryURL, keeping: artifactFilename)
-            return CacheArtifact(
+            let artifact = CacheArtifact(
                 key: key,
                 url: artifactURL,
                 byteCount: byteCount,
                 manifest: manifest
             )
+            recordCacheStore(projectID: projectID, artifact: artifact)
+            return artifact
         } catch {
             try? fileManager.removeItem(at: artifactURL)
             if let cacheError = error as? ProjectCacheError { throw cacheError }
@@ -331,20 +338,40 @@ public actor ProjectCacheStore {
         do {
             key = try keyBuilder.key(for: identity)
         } catch {
-            return .stale(.cacheUnreadable(error.localizedDescription))
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: "<unavailable>",
+                result: .stale(.cacheUnreadable(error.localizedDescription))
+            )
         }
         let entryURL = entryURL(projectID: projectID, identity: identity, key: key)
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: entryURL.path, isDirectory: &isDirectory) else {
-            return nearestStaleReason(projectID: projectID, expected: identity)
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: key,
+                result: nearestStaleReason(projectID: projectID, expected: identity)
+            )
         }
         guard isDirectory.boolValue else {
-            return .stale(.cacheUnreadable("The cache entry is not a directory: \(entryURL.path)"))
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: key,
+                result: .stale(.cacheUnreadable("The cache entry is not a directory: \(entryURL.path)"))
+            )
         }
 
         let manifestURL = entryURL.appendingPathComponent("manifest.json")
         guard fileManager.fileExists(atPath: manifestURL.path) else {
-            return .stale(.manifestMissing)
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: key,
+                result: .stale(.manifestMissing)
+            )
         }
         let manifest: CacheManifest
         do {
@@ -353,23 +380,53 @@ public actor ProjectCacheStore {
                 from: Data(contentsOf: manifestURL)
             )
         } catch {
-            return .stale(.manifestUnreadable(error.localizedDescription))
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: key,
+                result: .stale(.manifestUnreadable(error.localizedDescription))
+            )
         }
         guard manifest.schemaVersion == CacheManifest.currentSchemaVersion else {
-            return .stale(.unsupportedManifestVersion(manifest.schemaVersion))
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: key,
+                result: .stale(.unsupportedManifestVersion(manifest.schemaVersion))
+            )
         }
         guard manifest.identity == identity else {
             let changed = Self.changedFields(from: manifest.identity, to: identity)
             if changed.isEmpty {
-                return .stale(.keyMismatch(expected: key, actual: manifest.key))
+                return recordCacheLookup(
+                    projectID: projectID,
+                    identity: identity,
+                    key: key,
+                    result: .stale(.keyMismatch(expected: key, actual: manifest.key))
+                )
             }
-            return .stale(.identityChanged(changed))
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: key,
+                result: .stale(.identityChanged(changed))
+            )
         }
         guard manifest.key == key else {
-            return .stale(.keyMismatch(expected: key, actual: manifest.key))
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: key,
+                result: .stale(.keyMismatch(expected: key, actual: manifest.key))
+            )
         }
         guard Self.isSafeArtifactFilename(manifest.artifactFilename) else {
-            return .stale(.unsafeArtifactFilename(manifest.artifactFilename))
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: key,
+                result: .stale(.unsafeArtifactFilename(manifest.artifactFilename))
+            )
         }
 
         let artifactURL = entryURL.appendingPathComponent(manifest.artifactFilename)
@@ -378,26 +435,46 @@ public actor ProjectCacheStore {
             atPath: artifactURL.path,
             isDirectory: &artifactIsDirectory
         ), !artifactIsDirectory.boolValue else {
-            return .stale(.artifactMissing(artifactURL.path))
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: key,
+                result: .stale(.artifactMissing(artifactURL.path))
+            )
         }
         do {
             let attributes = try fileManager.attributesOfItem(atPath: artifactURL.path)
             let actualByteCount = (attributes[.size] as? NSNumber)?.int64Value ?? -1
             guard actualByteCount == manifest.artifactByteCount else {
-                return .stale(.artifactByteCountChanged(
-                    expected: manifest.artifactByteCount,
-                    actual: actualByteCount
-                ))
+                return recordCacheLookup(
+                    projectID: projectID,
+                    identity: identity,
+                    key: key,
+                    result: .stale(.artifactByteCountChanged(
+                        expected: manifest.artifactByteCount,
+                        actual: actualByteCount
+                    ))
+                )
             }
         } catch {
-            return .stale(.cacheUnreadable(error.localizedDescription))
+            return recordCacheLookup(
+                projectID: projectID,
+                identity: identity,
+                key: key,
+                result: .stale(.cacheUnreadable(error.localizedDescription))
+            )
         }
-        return .hit(CacheArtifact(
+        return recordCacheLookup(
+            projectID: projectID,
+            identity: identity,
             key: key,
-            url: artifactURL,
-            byteCount: manifest.artifactByteCount,
-            manifest: manifest
-        ))
+            result: .hit(CacheArtifact(
+                key: key,
+                url: artifactURL,
+                byteCount: manifest.artifactByteCount,
+                manifest: manifest
+            ))
+        )
     }
 
     public func clearProjectCache(projectID: ProjectState.ID) throws {
@@ -406,10 +483,75 @@ public actor ProjectCacheStore {
             isDirectory: true
         )
         try removeManagedItemIfPresent(projectURL)
+        diagnostics?.append(
+            level: "INFO",
+            sessionID: projectID.uuidString,
+            phase: "cache",
+            event: "cache.clear-project",
+            fields: ["cache_path": projectURL.path]
+        )
     }
 
     public func clearAllCaches() throws {
         try removeManagedItemIfPresent(projectsURL)
+        diagnostics?.append(
+            level: "INFO",
+            sessionID: "app",
+            phase: "cache",
+            event: "cache.clear-all",
+            fields: ["cache_path": projectsURL.path]
+        )
+    }
+
+    private func recordCacheStore(
+        projectID: ProjectState.ID,
+        artifact: CacheArtifact
+    ) {
+        diagnostics?.append(
+            level: "INFO",
+            sessionID: projectID.uuidString,
+            phase: "cache",
+            event: "cache.store",
+            fields: [
+                "cache_key": artifact.key,
+                "namespace": artifact.manifest.identity.namespace,
+                "logical_artifact_id": artifact.manifest.identity.logicalArtifactID,
+                "asset_id": artifact.manifest.identity.assetID.uuidString,
+                "artifact_path": artifact.url.path,
+                "artifact_bytes": String(artifact.byteCount),
+            ]
+        )
+    }
+
+    private func recordCacheLookup(
+        projectID: ProjectState.ID,
+        identity: CacheEntryIdentity,
+        key: String,
+        result: CacheLookupResult
+    ) -> CacheLookupResult {
+        var fields = [
+            "cache_key": key,
+            "namespace": identity.namespace,
+            "logical_artifact_id": identity.logicalArtifactID,
+            "asset_id": identity.assetID.uuidString,
+        ]
+        switch result {
+        case let .hit(artifact):
+            fields["result"] = "hit"
+            fields["artifact_path"] = artifact.url.path
+            fields["artifact_bytes"] = String(artifact.byteCount)
+        case let .stale(reason):
+            fields["result"] = "stale"
+            fields["reason"] = reason.localizedDescription
+        }
+        diagnostics?.append(
+            level: "INFO",
+            sessionID: projectID.uuidString,
+            phase: "cache",
+            event: "cache.lookup",
+            fields: fields
+        )
+        return result
     }
 
     private var projectsURL: URL {

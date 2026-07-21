@@ -4,6 +4,16 @@ import Testing
 
 @testable import FrogmouthCore
 
+@Test func timelineThumbnailWidthsUseStableRetinaBuckets() {
+    #expect(ThumbnailSizing.quantizedPixelWidth(displayWidth: 1) == 160)
+    #expect(ThumbnailSizing.quantizedPixelWidth(displayWidth: 80) == 160)
+    #expect(ThumbnailSizing.quantizedPixelWidth(displayWidth: 80.1) == 320)
+    #expect(ThumbnailSizing.quantizedPixelWidth(displayWidth: 159.9) == 320)
+    #expect(ThumbnailSizing.quantizedPixelWidth(displayWidth: 160.1) == 640)
+    #expect(ThumbnailSizing.quantizedPixelWidth(displayWidth: 10_000) == 640)
+    #expect(ThumbnailSizing.quantizedPixelWidth(displayWidth: .nan) == 160)
+}
+
 @Test func thumbnailRequestsSnapExactlyAndIgnoreStabilizationState() throws {
     let rate = try FrameRate(numerator: 24, denominator: 1)
     let assetID = UUID(uuidString: "AAAAAAAA-A000-0000-0000-000000000001")!
