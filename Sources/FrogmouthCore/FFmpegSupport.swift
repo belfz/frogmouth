@@ -5,12 +5,21 @@ public struct FFmpegInstallation: Equatable, Sendable {
     public let versionDescription: String
     public let semanticVersion: String
     public let majorVersion: Int
+    public let stabilizationCacheToolRevision: String
 
-    public init(executableURL: URL, versionDescription: String, semanticVersion: String, majorVersion: Int) {
+    public init(
+        executableURL: URL,
+        versionDescription: String,
+        semanticVersion: String,
+        majorVersion: Int,
+        stabilizationCacheToolRevision: String? = nil
+    ) {
         self.executableURL = executableURL
         self.versionDescription = versionDescription
         self.semanticVersion = semanticVersion
         self.majorVersion = majorVersion
+        self.stabilizationCacheToolRevision = stabilizationCacheToolRevision
+            ?? "\(versionDescription) / libvidstab filters"
     }
 }
 
@@ -64,11 +73,20 @@ public struct FFmpegLocator: FFmpegLocating, @unchecked Sendable {
         }
 
         let firstLine = version.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? version
+        let executableFingerprint = try? MediaFingerprinter().fingerprint(url: executableURL)
+        let toolRevision = [
+            firstLine,
+            executableFingerprint.map {
+                "binary=\($0.fileSize):\($0.modificationTimeNanoseconds)"
+            } ?? "binary=unavailable",
+            "libvidstab-filters=present",
+        ].joined(separator: " / ")
         return FFmpegInstallation(
             executableURL: executableURL,
             versionDescription: firstLine,
             semanticVersion: semanticVersion,
-            majorVersion: majorVersion
+            majorVersion: majorVersion,
+            stabilizationCacheToolRevision: toolRevision
         )
     }
 

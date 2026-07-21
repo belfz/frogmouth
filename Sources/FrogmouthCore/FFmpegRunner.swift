@@ -49,6 +49,7 @@ public final class FFmpegRunner: FFmpegExecuting, @unchecked Sendable {
                 let stdoutPipe = Pipe()
                 let stderrPipe = Pipe()
                 let collector = ProcessOutputCollector(duration: duration, progress: progress)
+                let startedAt = Date()
 
                 process.executableURL = executable
                 process.arguments = arguments
@@ -82,6 +83,18 @@ public final class FFmpegRunner: FFmpegExecuting, @unchecked Sendable {
                         exitStatus: terminated.terminationStatus,
                         output: output
                     )
+                    self?.diagnostics.append(
+                        level: terminated.terminationStatus == 0 ? "INFO" : "ERROR",
+                        sessionID: sessionID,
+                        phase: phase,
+                        event: "process.finished",
+                        fields: [
+                            "pid": String(terminated.processIdentifier),
+                            "exit_status": String(terminated.terminationStatus),
+                            "cancelled": String(wasCancelled),
+                            "elapsed_ms": String(Int(Date().timeIntervalSince(startedAt) * 1_000)),
+                        ]
+                    )
 
                     if wasCancelled {
                         continuation.resume(throwing: FrogmouthError.cancelled)
@@ -102,10 +115,31 @@ public final class FFmpegRunner: FFmpegExecuting, @unchecked Sendable {
                         activeProcess = process
                     }
                     try process.run()
+                    diagnostics.append(
+                        level: "INFO",
+                        sessionID: sessionID,
+                        phase: phase,
+                        event: "process.started",
+                        fields: [
+                            "pid": String(process.processIdentifier),
+                            "executable": executable.path,
+                            "expected_duration_seconds": String(duration),
+                        ]
+                    )
                 } catch {
                     processLock.withLock { activeProcess = nil }
                     stdoutPipe.fileHandleForReading.readabilityHandler = nil
                     stderrPipe.fileHandleForReading.readabilityHandler = nil
+                    diagnostics.append(
+                        level: "ERROR",
+                        sessionID: sessionID,
+                        phase: phase,
+                        event: "process.launch-failed",
+                        fields: [
+                            "executable": executable.path,
+                            "message": error.localizedDescription,
+                        ]
+                    )
                     continuation.resume(throwing: FrogmouthError.processingFailed(error.localizedDescription))
                 }
             }

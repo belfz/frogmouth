@@ -1,4 +1,12 @@
-# frogmouth — technical design (v1)
+# frogmouth — original single-clip technical design (archived)
+
+> **Status:** Historical design record. The session-only single-clip editor described below
+> was retired after the project-based timeline reached feature parity. The active product and
+> implementation contract is [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md); current execution and
+> acceptance status is tracked in
+> [TIMELINE_IMPLEMENTATION_TASKS.md](TIMELINE_IMPLEMENTATION_TASKS.md). Statements below about
+> having no project files, editing only one clip, `EditorViewModel`, `EditState`, and
+> `TrimScrubber` no longer describe the shipped application.
 
 ## 1. Purpose and scope
 
