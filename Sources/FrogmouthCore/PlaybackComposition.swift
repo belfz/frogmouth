@@ -27,8 +27,8 @@ public enum PlaybackCompositionError: LocalizedError, Equatable, Sendable {
 
 /// The physical media and range inserted for a logical timeline clip.
 ///
-/// Phase 3 can supply a valid stabilized proxy here while the composition
-/// builder and timeline/source mapping continue to use the same public API.
+/// A valid stabilized proxy can be supplied here while the composition builder
+/// and timeline/source mapping continue to use the same public API.
 public struct PlaybackMediaSource: Equatable, Sendable {
     public let url: URL
     public let range: MediaTimeRange

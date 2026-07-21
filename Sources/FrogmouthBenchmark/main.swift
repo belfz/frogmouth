@@ -274,7 +274,7 @@ private func makeTargetScenario(root: URL, fixture: URL) throws -> Scenario {
     }
     return Scenario(
         project: ProjectState(
-            name: "T21 25-source 50-clip 30-minute target",
+            name: "25-source 50-clip 30-minute target",
             mediaLibrary: assets,
             timelineFormat: TimelineFormat(
                 width: 4_096,
@@ -327,7 +327,7 @@ private func makeCompositionScenario(root: URL, fixture: URL) async throws -> Sc
     }
     return Scenario(
         project: ProjectState(
-            name: "T21 lightweight AV composition",
+            name: "Lightweight AV composition",
             mediaLibrary: assets,
             timelineFormat: TimelineFormat(
                 width: facts.width,
@@ -450,7 +450,7 @@ private func renderReport(
     } ?? 0
     let avWorkload = "25 hard-linked \(avFormat?.width ?? 0)×\(avFormat?.height ?? 0) source paths, \(avProject.clips.count) clips, \(String(format: "%.2f", avDuration))-second sequence"
     var lines = [
-        "# frogmouth T21 benchmark",
+        "# frogmouth editor benchmark",
         "",
         "- Date: \(ISO8601DateFormatter().string(from: Date()))",
         "- System: \(ProcessInfo.processInfo.operatingSystemVersionString)",

@@ -1,12 +1,12 @@
 # Deterministic media fixtures
 
-The phase-0 integration fixtures are generated rather than committed as media binaries. Run:
+The integration fixtures are generated rather than committed as media binaries. Run:
 
 ```sh
 ./scripts/verify-media-fixtures.sh
 ```
 
-By default the files are written under `.build/test-media-fixtures`. Pass another directory as the first argument when a spike needs an isolated workspace. `probe-media-fixture.sh` prints exact FFprobe JSON for one file, including decoded frame count, rational frame rate, audio facts, and colour signaling.
+By default the files are written under `.build/test-media-fixtures`. Pass another directory as the first argument when an isolated workspace is useful. `probe-media-fixture.sh` prints exact FFprobe JSON for one file, including decoded frame count, rational frame rate, audio facts, and colour signaling.
 
 Every video frame contains its zero-based frame number. Audio fixtures use a distinct constant tone so concatenation and synchronization tests can identify their source. The set covers:
 
@@ -21,9 +21,9 @@ Generation is deterministic in content, timing, stream layout, and metadata for 
 
 `ProjectSchemaV1.frogmouth` is the checked-in canonical, human-readable project JSON fixture. Unlike generated media, it is committed intentionally: deterministic encode/decode tests use it to lock schema version 1 and make future migrations reviewable as ordinary text diffs.
 
-## Baseline before timeline work
+## Local app bundle
 
-At the start of phase 0 on FFmpeg 7.1.1, frogmouth has 14 passing Swift tests, including the installed-FFmpeg stabilization integration test. The local release app bundle is built with:
+Build the local release app bundle with:
 
 ```sh
 ./scripts/build-app.sh

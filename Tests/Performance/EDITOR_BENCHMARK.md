@@ -1,4 +1,4 @@
-# T21 — performance and accessibility hardening
+# Editor performance and accessibility benchmark
 
 Measured on 2026-07-20 with a release build on Apple silicon, macOS 15.7.7,
 10 CPU cores, and 68.72 GB physical memory.
@@ -80,7 +80,7 @@ adjustable trim handles and playhead, stabilization state, timeline zoom, playba
 and explicit selection actions. Timeline clips and trim handles participate in keyboard focus;
 Return selects a focused clip and the arrow keys adjust a focused trim handle by one frame.
 
-Before T21 is accepted, manually verify:
+For release acceptance, manually verify:
 
 1. Enable VoiceOver and navigate Media Library, timeline, viewer, Inspector, and the processing
    modal. Confirm clip number/name/state, playhead timecode, and trim-handle values are spoken.

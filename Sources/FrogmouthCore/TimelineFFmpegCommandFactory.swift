@@ -1,7 +1,7 @@
 import Foundation
 
 public enum TimelineRenderEncoding: Equatable, Sendable {
-    /// Shipping encoder policy. T19 adds final metadata and atomic destination handling.
+    /// Shipping encoder policy used by the validated, atomic timeline exporter.
     case delivery
     /// Deterministic, software-only codecs used by media-fixture integration tests.
     case verification

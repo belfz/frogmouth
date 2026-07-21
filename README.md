@@ -8,11 +8,11 @@ frogmouth is a macOS app for quickly assembling, trimming, splitting, and stabil
 
 The project was initially designed and developed with Canon EOS R5 footage in mind—primarily 4K H.264 MP4 files with AAC audio. Those videos remain its principal development and testing material, while the application UI is intentionally camera-agnostic. Other formats that FFmpeg can decode are supported on a best-effort basis unless documented otherwise.
 
-The active single-track editor is specified in [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md), with its ordered implementation history and deferred backlog in [TIMELINE_IMPLEMENTATION_TASKS.md](TIMELINE_IMPLEMENTATION_TASKS.md). The retired session-only editor remains in [TECHNICAL_DESIGN.md](TECHNICAL_DESIGN.md) as a historical design record. Stabilization latency, benchmarks, alternatives, and optimization decisions are tracked in [STABILIZATION_PERFORMANCE.md](STABILIZATION_PERFORMANCE.md). The legacy-retirement parity evidence is recorded in [Tests/Parity/T22_PARITY.md](Tests/Parity/T22_PARITY.md).
+The active single-track editor is specified in [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md). Stabilization latency, benchmarks, alternatives, and optimization decisions are tracked in [STABILIZATION_PERFORMANCE.md](STABILIZATION_PERFORMANCE.md).
 
 The first timeline release will preserve the colour characteristics established by its first clip. Clips with conflicting primaries, transfer function (including HDR or Log), matrix, or full/limited range will be rejected with the differing properties listed; frogmouth will not silently convert them. Proper colour conversion is deferred to a later iteration.
 
-Stabilization is intentionally blocking in the first timeline release: analysis and preview rendering show a cancellable progress view, but editing cannot continue until the operation finishes or is cancelled. Background per-clip stabilization is planned for a later iteration. The 25-source/50-clip performance methodology and current measurements are recorded in [Tests/Performance/T21_BENCHMARK.md](Tests/Performance/T21_BENCHMARK.md).
+Stabilization is intentionally blocking in the first timeline release: analysis and preview rendering show a cancellable progress view, but editing cannot continue until the operation finishes or is cancelled. Background per-clip stabilization is planned for a later iteration. The 25-source/50-clip performance methodology and current measurements are recorded in [Tests/Performance/EDITOR_BENCHMARK.md](Tests/Performance/EDITOR_BENCHMARK.md).
 
 ## Using frogmouth
 
@@ -63,7 +63,7 @@ frogmouth verifies FFmpeg only at startup. When setup is required, install the d
 - Basic colour controls: exposure, white balance, and contrast while preserving a no-adjustment default.
 - A stabilization-strength slider after preset tuning is validated.
 - Before/after stabilization comparison.
-- Expose and manage the currently implicit ordered edit-operation stack.
+- Expose and manage the currently implicit ordered stabilization-pass stack, including per-pass controls.
 - Process stabilization as background per-clip jobs while editing continues.
 - Recent Projects, comprehensive timeline keyboard controls, and user-configurable editor layout.
 - A source preview with pre-insert in/out selection, audio waveforms, transitions, and selected-range export.
