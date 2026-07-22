@@ -245,7 +245,10 @@ public struct TimelineRenderPlanner: Sendable {
             totalDuration: timelineIndex.totalDuration,
             hasAudio: hasAudio,
             targetVideoBitrate: QualityPolicy.targetVideoBitrate(
-                sourceBitrate: normalizedPeakBitrate
+                sourceBitrate: normalizedPeakBitrate,
+                outputWidth: format.width,
+                outputHeight: format.height,
+                outputFramesPerSecond: Self.framesPerSecond(format.frameRate)
             )
         )
     }

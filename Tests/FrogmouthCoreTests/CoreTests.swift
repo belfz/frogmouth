@@ -3,10 +3,37 @@ import Testing
 
 @testable import FrogmouthCore
 
-@Test func qualityPolicyUsesConservativeAutomaticBitrate() {
-    #expect(QualityPolicy.targetVideoBitrate(sourceBitrate: 120_000_000) == 72_000_000)
-    #expect(QualityPolicy.targetVideoBitrate(sourceBitrate: 10_000_000) == 35_000_000)
-    #expect(QualityPolicy.targetVideoBitrate(sourceBitrate: 200_000_000) == 80_000_000)
+@Test func qualityPolicyUsesResolutionAwareConservativeAutomaticBitrate() {
+    #expect(QualityPolicy.targetVideoBitrate(
+        sourceBitrate: 120_000_000,
+        outputWidth: 4_096,
+        outputHeight: 2_160,
+        outputFramesPerSecond: 24
+    ) == 72_000_000)
+    #expect(QualityPolicy.targetVideoBitrate(
+        sourceBitrate: 14_844_567,
+        outputWidth: 1_920,
+        outputHeight: 1_080,
+        outputFramesPerSecond: 30
+    ) == 10_253_906)
+    #expect(QualityPolicy.targetVideoBitrate(
+        sourceBitrate: 10_000_000,
+        outputWidth: 1_920,
+        outputHeight: 1_080,
+        outputFramesPerSecond: 30
+    ) == 10_000_000)
+    #expect(QualityPolicy.targetVideoBitrate(
+        sourceBitrate: 0,
+        outputWidth: 1_920,
+        outputHeight: 1_080,
+        outputFramesPerSecond: 30
+    ) == 10_253_906)
+    #expect(QualityPolicy.targetVideoBitrate(
+        sourceBitrate: 200_000_000,
+        outputWidth: 4_096,
+        outputHeight: 2_160,
+        outputFramesPerSecond: 24
+    ) == 80_000_000)
 }
 
 @Test func stabilizationProfilesAreFixedAndDistinct() {
