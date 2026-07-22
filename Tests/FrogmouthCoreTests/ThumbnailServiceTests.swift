@@ -129,7 +129,7 @@ import Testing
 @Test func avThumbnailGeneratorProducesABoundedJPEGFromTheMediaFixture() async throws {
     let fixture = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         .appendingPathComponent(".build/test-media-fixtures/base-24fps-320x180.mp4")
-    guard FileManager.default.fileExists(atPath: fixture.path) else { return }
+    guard try IntegrationTestSupport.mediaFilesExist([fixture]) else { return }
     let request = try ThumbnailRequest(
         assetID: UUID(uuidString: "AAAAAAAA-A300-0000-0000-000000000001")!,
         sourceFingerprint: MediaFingerprinter().fingerprint(url: fixture),

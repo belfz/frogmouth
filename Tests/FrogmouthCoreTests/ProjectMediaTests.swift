@@ -269,8 +269,7 @@ import Testing
         .appendingPathComponent(".build/test-media-fixtures", isDirectory: true)
     let baseURL = fixtures.appendingPathComponent("base-24fps-320x180.mp4")
     let wideURL = fixtures.appendingPathComponent("wide-30000-1001-426x180.mp4")
-    guard FileManager.default.fileExists(atPath: baseURL.path),
-          FileManager.default.fileExists(atPath: wideURL.path) else { return }
+    guard try IntegrationTestSupport.mediaFilesExist([baseURL, wideURL]) else { return }
 
     let inspector = MediaInspector()
     let base = try await inspector.inspect(url: baseURL)

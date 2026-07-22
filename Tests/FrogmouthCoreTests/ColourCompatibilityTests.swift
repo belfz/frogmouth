@@ -93,12 +93,9 @@ import Testing
     let baseURL = fixtures.appendingPathComponent("base-24fps-320x180.mp4")
     let wideURL = fixtures.appendingPathComponent("wide-30000-1001-426x180.mp4")
     let conflictingURL = fixtures.appendingPathComponent("incompatible-bt2020-pq.mp4")
-    guard [baseURL, wideURL, conflictingURL].allSatisfy({
-        FileManager.default.fileExists(atPath: $0.path)
-    }) else {
-        // The phase validator generates these files before selecting this test.
-        return
-    }
+    guard try IntegrationTestSupport.mediaFilesExist([
+        baseURL, wideURL, conflictingURL,
+    ]) else { return }
 
     let inspector = MediaInspector()
     let base = try await inspector.inspect(url: baseURL)

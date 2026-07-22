@@ -77,10 +77,17 @@ import Testing
 }
 
 @Test func installedFFmpegCanAnalyzeAndRenderAClipScopedAudioLinkedProxy() async throws {
-    let sample = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        .appendingPathComponent("EOS R5 example video.MP4")
-    guard FileManager.default.fileExists(atPath: sample.path),
-          let installation = try? await FFmpegLocator().locateAndValidate() else { return }
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let canonSample = root.appendingPathComponent("EOS R5 example video.MP4")
+    let generatedSample = root.appendingPathComponent(
+        ".build/test-media-fixtures/base-24fps-320x180.mp4"
+    )
+    let sample = FileManager.default.fileExists(atPath: canonSample.path)
+        ? canonSample
+        : generatedSample
+    guard try IntegrationTestSupport.mediaFilesExist([sample]),
+          let installation = try await IntegrationTestSupport.ffmpegInstallation() else { return }
+    let sampleInfo = try await MediaInspector().inspect(url: sample)
 
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let workspace = try SessionWorkspace(baseDirectory: base)
@@ -144,8 +151,11 @@ import Testing
     ) { _ in }
 
     let previewInfo = try await MediaInspector().inspect(url: workspace.previewURL)
+    let expectedHeight = Int(
+        (Double(sampleInfo.height) * 1_024 / Double(sampleInfo.width) / 2).rounded()
+    ) * 2
     #expect(previewInfo.videoCodec == "hvc1")
     #expect(previewInfo.audioCodec == "aac")
     #expect(previewInfo.width == 1024)
-    #expect(previewInfo.height == 540)
+    #expect(previewInfo.height == expectedHeight)
 }

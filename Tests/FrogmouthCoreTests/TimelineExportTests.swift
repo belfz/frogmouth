@@ -228,10 +228,10 @@ import Testing
 }
 
 @Test func verificationExporterRendersValidatesAndInstallsCompleteTimeline() async throws {
-    guard let installation = try? await FFmpegLocator().locateAndValidate() else { return }
     let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         .appendingPathComponent(".build/test-media-fixtures/base-24fps-320x180.mp4")
-    guard FileManager.default.fileExists(atPath: sourceURL.path) else { return }
+    guard try IntegrationTestSupport.mediaFilesExist([sourceURL]),
+          let installation = try await IntegrationTestSupport.ffmpegInstallation() else { return }
 
     let persisted = try await AVProjectMediaFactsInspector().inspect(url: sourceURL)
     let asset = MediaAsset(
@@ -290,10 +290,10 @@ import Testing
 }
 
 @Test func mediaInspectorExposesMP4FormatSpecificProvenanceValue() async throws {
-    guard let installation = try? await FFmpegLocator().locateAndValidate() else { return }
     let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         .appendingPathComponent(".build/test-media-fixtures/base-24fps-320x180.mp4")
-    guard FileManager.default.fileExists(atPath: sourceURL.path) else { return }
+    guard try IntegrationTestSupport.mediaFilesExist([sourceURL]),
+          let installation = try await IntegrationTestSupport.ffmpegInstallation() else { return }
 
     let workspace = try SessionWorkspace()
     defer { workspace.removeAll() }

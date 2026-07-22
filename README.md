@@ -4,6 +4,8 @@
   <img src="Assets/AppIcon.png" alt="frogmouth logo" width="240">
 </p>
 
+[![CI](https://github.com/belfz/frogmouth/actions/workflows/ci.yml/badge.svg)](https://github.com/belfz/frogmouth/actions/workflows/ci.yml)
+
 frogmouth is a macOS app for quickly assembling, trimming, splitting, and stabilizing a gapless sequence of video clips, then exporting the complete timeline as a smaller, high-quality HEVC file.
 
 The project was initially designed and developed with Canon EOS R5 footage in mind—primarily 4K H.264 MP4 files with AAC audio. Those videos remain its principal development and testing material, while the application UI is intentionally camera-agnostic. Other formats that FFmpeg can decode are supported on a best-effort basis unless documented otherwise.
@@ -46,6 +48,10 @@ Build a local, unsigned app bundle with:
 ```
 
 The result is `build/frogmouth.app`. Run tests with `swift test`.
+
+Pull requests and pushes to `main` run the complete suite on a macOS 15 Apple-silicon
+runner. CI generates and verifies deterministic media fixtures, exercises FFmpeg-backed
+integration tests, and builds and validates the unsigned app bundle.
 
 Run the target-scale editor benchmark with:
 
