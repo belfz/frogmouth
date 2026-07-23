@@ -17,7 +17,7 @@ import Testing
 
     let contents = diagnostics.contents()
     #expect(contents.contains("event=\"project.snapshot\""))
-    #expect(contents.contains("schema_version=\"1\""))
+    #expect(contents.contains("schema_version=\"2\""))
     #expect(contents.contains("project_id=\"\(fixture.project.id.uuidString)\""))
     #expect(contents.contains("event=\"project.media\""))
     #expect(contents.contains("asset_id=\"\(fixture.asset.id.uuidString)\""))

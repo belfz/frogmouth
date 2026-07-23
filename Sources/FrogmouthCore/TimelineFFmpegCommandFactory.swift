@@ -208,6 +208,18 @@ public enum TimelineFFmpegCommandFactory {
             "setsar=1",
             "format=yuv420p",
         ]
+        if let fade = clip.videoFadeIn {
+            filters.append(
+                "fade=t=in:st=0:d=\(time(milliseconds: fade.durationMilliseconds)):color=black"
+            )
+        }
+        if let fade = clip.videoFadeOut {
+            let duration = seconds(clip.timelineDuration)
+            let fadeDuration = seconds(milliseconds: fade.durationMilliseconds)
+            filters.append(
+                "fade=t=out:st=\(time(max(0, duration - fadeDuration))):d=\(time(fadeDuration)):color=black"
+            )
+        }
         return sourceLabel + filters.joined(separator: ",") + "[v\(index)]"
     }
 
@@ -376,5 +388,13 @@ public enum TimelineFFmpegCommandFactory {
 
     private static func time(_ value: TimeInterval) -> String {
         String(format: "%.9f", value)
+    }
+
+    private static func seconds(milliseconds: Int64) -> TimeInterval {
+        Double(milliseconds) / 1_000
+    }
+
+    private static func time(milliseconds: Int64) -> String {
+        time(seconds(milliseconds: milliseconds))
     }
 }

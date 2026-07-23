@@ -20,12 +20,12 @@ Stabilization is intentionally blocking in the first timeline release: analysis 
 
 1. Start a new project, create one from video files, or open an existing `.frogmouth` file.
 2. Import sources into the Media Library, then append or drag them into the gapless timeline.
-3. Select clips to trim, split, duplicate, reorder, delete, or stabilize. Trims commit when a handle drag ends; project edits participate in the current session's undo/redo history.
+3. Select clips to trim, split, duplicate, reorder, delete, stabilize, or add independent picture-only fades to/from black. Trims commit when a handle drag ends; project edits participate in the current session's undo/redo history.
 4. Save once to choose a lightweight `.frogmouth` JSON location. Later committed edits autosave there; source files are never modified or embedded.
 5. Preview the timeline, then export the complete sequence as a high-quality HEVC MP4. Export defaults to the project directory, or the first used source directory for an unsaved project.
 6. If processing or export behaves unexpectedly, use **Diagnostics → Copy Diagnostics** or **Reveal Logs in Finder**.
 
-Project schema `1`, cache-manifest schema `1`, stabilization-processing revision `1`, and thumbnail-processing revision `1` define the first timeline release's compatibility boundary. Project schema changes require migrations; cache revisions are disposable and rebuild automatically. Details are in [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md#first-timeline-release-compatibility-record).
+Project schema `2`, cache-manifest schema `1`, stabilization-processing revision `1`, and thumbnail-processing revision `1` define the current pre-release compatibility boundary. Schema 2 intentionally replaces schema 1 without migration while frogmouth remains pre-release; cache revisions are disposable and rebuild automatically. Details are in [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md#first-timeline-release-compatibility-record).
 
 ## Development
 

@@ -108,6 +108,28 @@ import Testing
     }
 }
 
+@Test func timelineFFmpegAppliesVideoFadesAfterFinalClipImageProcessing() throws {
+    let fixture = try makeSyntheticRenderFixture()
+    var project = fixture.project
+    project.clips[0].videoFadeIn = VideoFade(durationMilliseconds: 250)
+    project.clips[3].videoFadeOut = VideoFade(durationMilliseconds: 500)
+    let plan = try TimelineRenderPlanner().plan(TimelineRenderRequest(
+        project: project,
+        mediaURLs: fixture.request.mediaURLs,
+        stabilizationTransforms: fixture.request.stabilizationTransforms
+    ))
+    let graph = try TimelineFFmpegCommandFactory.filterGraph(for: plan)
+
+    let normalized = try #require(graph.range(of: "format=yuv420p"))
+    let fadeIn = try #require(graph.range(
+        of: "fade=t=in:st=0:d=0.250000000:color=black"
+    ))
+    #expect(normalized.lowerBound < fadeIn.lowerBound)
+    #expect(graph.contains(
+        "fade=t=out:st=0.500000000:d=0.500000000:color=black"
+    ))
+}
+
 @Test func renderPlannerRejectsMissingTransformsAndNonFrameAlignedSourceBoundaries() throws {
     let fixture = try makeSyntheticRenderFixture()
     let missingTransforms = TimelineRenderRequest(
@@ -266,7 +288,8 @@ import Testing
         clips: [
             TimelineClip(
                 assetID: base.id,
-                sourceRange: try frameRange(rate24, start: 0, count: 12)
+                sourceRange: try frameRange(rate24, start: 0, count: 12),
+                videoFadeIn: VideoFade(durationMilliseconds: 250)
             ),
             TimelineClip(
                 assetID: base.id,
@@ -282,7 +305,8 @@ import Testing
             ),
             TimelineClip(
                 assetID: base.id,
-                sourceRange: try frameRange(rate24, start: 24, count: 12)
+                sourceRange: try frameRange(rate24, start: 24, count: 12),
+                videoFadeOut: VideoFade(durationMilliseconds: 250)
             ),
         ]
     )
@@ -333,6 +357,11 @@ import Testing
     #expect((0.021...0.025).contains(middle550))
     #expect(silence < 0.001)
     #expect((0.017...0.020).contains(final440))
+    let blackStart = try averageLuma(output, start: 0, ffmpeg: installation.executableURL)
+    let visibleImage = try averageLuma(output, start: 0.375, ffmpeg: installation.executableURL)
+    let blackEnd = try averageLuma(output, start: 2.95, ffmpeg: installation.executableURL)
+    #expect(blackStart < visibleImage * 0.25)
+    #expect(blackEnd < visibleImage * 0.5)
 }
 
 private struct SyntheticRenderFixture {
@@ -531,6 +560,33 @@ private func zeroCrossingRate(_ url: URL, start: Double, ffmpeg: URL) throws -> 
     guard let value = line?.split(separator: ":").last,
           let result = Double(value.trimmingCharacters(in: .whitespaces)) else {
         throw FrogmouthError.outputValidationFailed("Could not read the audio zero-crossing rate.")
+    }
+    return result
+}
+
+private func averageLuma(_ url: URL, start: Double, ffmpeg: URL) throws -> Double {
+    let data = try runProcess(
+        executable: ffmpeg,
+        arguments: [
+            "-hide_banner",
+            "-loglevel", "info",
+            "-ss", String(start),
+            "-i", url.path,
+            "-frames:v", "1",
+            "-vf", "signalstats,metadata=print",
+            "-f", "null",
+            "-",
+        ]
+    )
+    let output = String(decoding: data, as: UTF8.self)
+    let line = output.split(separator: "\n").first {
+        $0.contains("lavfi.signalstats.YAVG=")
+    }
+    guard let value = line?.split(separator: "=").last,
+          let result = Double(value) else {
+        throw FrogmouthError.outputValidationFailed(
+            "Could not read rendered average luma."
+        )
     }
     return result
 }

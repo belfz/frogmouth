@@ -558,6 +558,13 @@ private struct ProjectInspectorView: View {
         }
         InspectorValue(label: "Start", value: formatDuration(clip.sourceRange.start))
         InspectorValue(label: "Duration", value: formatDuration(clip.sourceRange.duration))
+        if let entry = try? TimelineIndex(project: project).entry(for: clip.id) {
+            VideoFadeInspector(
+                document: document,
+                clip: clip,
+                timelineDuration: entry.timelineRange.duration
+            )
+        }
         if let location = document.playbackLocation,
            location.clipID == clip.id,
            let asset = project.mediaLibrary.first(where: { $0.id == clip.assetID }) {
@@ -631,6 +638,150 @@ private struct ProjectInspectorView: View {
             InspectorValue(label: "Sources", value: "\(project.mediaLibrary.count)")
             InspectorValue(label: "Clips", value: "\(project.clips.count)")
         }
+    }
+}
+
+private struct VideoFadeInspector: View {
+    @ObservedObject var document: ProjectDocumentViewModel
+    let clip: TimelineClip
+    let timelineDuration: MediaTime
+
+    @State private var fadeInText: String
+    @State private var fadeOutText: String
+    @State private var skipsNextFocusCommit = false
+    @FocusState private var focusedEdge: VideoFadeEdge?
+
+    init(
+        document: ProjectDocumentViewModel,
+        clip: TimelineClip,
+        timelineDuration: MediaTime
+    ) {
+        self.document = document
+        self.clip = clip
+        self.timelineDuration = timelineDuration
+        _fadeInText = State(initialValue: Self.text(for: clip.videoFadeIn))
+        _fadeOutText = State(initialValue: Self.text(for: clip.videoFadeOut))
+    }
+
+    var body: some View {
+        Divider()
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Video Fades")
+                .font(.headline)
+            fadeRow(
+                edge: .fadeIn,
+                fade: clip.videoFadeIn,
+                text: $fadeInText
+            )
+            fadeRow(
+                edge: .fadeOut,
+                fade: clip.videoFadeOut,
+                text: $fadeOutText
+            )
+            Text("Linear fade to or from black. Audio is unchanged.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .disabled(!document.canEditSelectedClip)
+        .onChange(of: focusedEdge) { previous, _ in
+            guard let previous else { return }
+            if skipsNextFocusCommit {
+                skipsNextFocusCommit = false
+            } else {
+                commit(edge: previous)
+            }
+        }
+        .onChange(of: clip.videoFadeIn) { _, fade in
+            if focusedEdge != .fadeIn { fadeInText = Self.text(for: fade) }
+        }
+        .onChange(of: clip.videoFadeOut) { _, fade in
+            if focusedEdge != .fadeOut { fadeOutText = Self.text(for: fade) }
+        }
+    }
+
+    @ViewBuilder
+    private func fadeRow(
+        edge: VideoFadeEdge,
+        fade: VideoFade?,
+        text: Binding<String>
+    ) -> some View {
+        if let fade {
+            VStack(alignment: .leading, spacing: 5) {
+                Label(edge.title, systemImage: symbol(for: edge))
+                    .font(.callout.weight(.medium))
+                HStack(spacing: 6) {
+                    TextField("Duration", text: text)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 82)
+                        .multilineTextAlignment(.trailing)
+                        .focused($focusedEdge, equals: edge)
+                        .onSubmit { commit(edge: edge) }
+                        .accessibilityLabel("\(edge.title) duration in milliseconds")
+                    Text("ms")
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button {
+                        skipsNextFocusCommit = focusedEdge == edge
+                        if focusedEdge == edge { focusedEdge = nil }
+                        document.removeSelectedVideoFade(at: edge)
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove \(edge.title.lowercased())")
+                    .accessibilityLabel("Remove \(edge.title.lowercased())")
+                }
+                let maximum = (try? VideoFadePolicy.maximumDurationMilliseconds(
+                    at: edge,
+                    for: clip,
+                    timelineDuration: timelineDuration
+                )) ?? fade.durationMilliseconds
+                Text("Maximum \(maximum) ms")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        } else {
+            Button {
+                document.enableSelectedVideoFade(at: edge)
+            } label: {
+                Label("Add \(edge.title)", systemImage: symbol(for: edge))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityHint("Adds a picture-only linear fade with a valid default duration.")
+        }
+    }
+
+    private func commit(edge: VideoFadeEdge) {
+        let value = edge == .fadeIn ? fadeInText : fadeOutText
+        let currentFade = clip.videoFade(at: edge)
+        let parsed = Int64(value.trimmingCharacters(in: .whitespacesAndNewlines))
+        let maximum = try? VideoFadePolicy.maximumDurationMilliseconds(
+            at: edge,
+            for: clip,
+            timelineDuration: timelineDuration
+        )
+        let isValid = parsed.map { value in
+            value > 0 && maximum.map { value <= $0 } != false
+        } ?? false
+        if !isValid {
+            if edge == .fadeIn {
+                fadeInText = Self.text(for: currentFade)
+            } else {
+                fadeOutText = Self.text(for: currentFade)
+            }
+        }
+        document.commitSelectedVideoFadeDuration(value, at: edge)
+    }
+
+    private func symbol(for edge: VideoFadeEdge) -> String {
+        switch edge {
+        case .fadeIn: "circle.lefthalf.filled"
+        case .fadeOut: "circle.righthalf.filled"
+        }
+    }
+
+    private static func text(for fade: VideoFade?) -> String {
+        fade.map { String($0.durationMilliseconds) } ?? ""
     }
 }
 

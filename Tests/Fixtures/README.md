@@ -23,7 +23,7 @@ version is a test-only allowance; it does not expand the versions accepted by th
 
 ## Project schema fixture
 
-`ProjectSchemaV1.frogmouth` is the checked-in canonical, human-readable project JSON fixture. Unlike generated media, it is committed intentionally: deterministic encode/decode tests use it to lock schema version 1 and make future migrations reviewable as ordinary text diffs.
+`ProjectSchemaV2.frogmouth` is the checked-in canonical, human-readable project JSON fixture. Unlike generated media, it is committed intentionally: deterministic encode/decode tests use it to lock schema version 2 and make future schema changes reviewable as ordinary text diffs. Schema 2 directly replaces schema 1 without migration while frogmouth remains pre-release.
 
 ## Local app bundle
 

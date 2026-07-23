@@ -19,6 +19,22 @@ public enum TimelineEditError: LocalizedError, Equatable, Sendable {
     case unsupportedStabilizationMode(UUID)
     case invalidStabilizationCoverage(UUID)
     case nonNestedStabilizationCoverage(parent: UUID, child: UUID)
+    case invalidVideoFadeDuration(
+        clipID: TimelineClip.ID,
+        edge: VideoFadeEdge,
+        durationMilliseconds: Int64
+    )
+    case invalidVideoFadeInput(
+        clipID: TimelineClip.ID,
+        edge: VideoFadeEdge,
+        value: String
+    )
+    case noVideoFadeDurationAvailable(clipID: TimelineClip.ID, edge: VideoFadeEdge)
+    case videoFadesExceedClipDuration(
+        clipID: TimelineClip.ID,
+        totalMilliseconds: Int64,
+        maximumMilliseconds: Int64
+    )
     case timing(MediaTimeError)
 
     public var errorDescription: String? {
@@ -59,6 +75,14 @@ public enum TimelineEditError: LocalizedError, Equatable, Sendable {
             "Stabilization pass \(id.uuidString) does not cover a valid range for this clip."
         case let .nonNestedStabilizationCoverage(parent, child):
             "Stabilization pass \(child.uuidString) extends outside preceding pass \(parent.uuidString)."
+        case let .invalidVideoFadeDuration(clipID, edge, duration):
+            "Clip \(clipID.uuidString) has an invalid \(edge.title.lowercased()) duration of \(duration) ms. Enter a positive whole number of milliseconds."
+        case let .invalidVideoFadeInput(clipID, edge, value):
+            "Clip \(clipID.uuidString) has an invalid \(edge.title.lowercased()) value “\(value)”. Enter a positive whole number of milliseconds."
+        case let .noVideoFadeDurationAvailable(clipID, edge):
+            "Clip \(clipID.uuidString) has no duration available for \(edge.title.lowercased()). Shorten or remove the opposite fade first."
+        case let .videoFadesExceedClipDuration(clipID, total, maximum):
+            "Clip \(clipID.uuidString) has \(total) ms of video fades, but its maximum is \(maximum) ms. Shorten or remove a fade before trimming or splitting this clip."
         case let .timing(error):
             "The edit has invalid or overflowing media timing: \(String(describing: error))."
         }
@@ -123,6 +147,7 @@ public struct TimelineIndex: Equatable, Sendable {
 
             let start = try Self.mapTiming { try format.frameRate.time(forFrame: cursor) }
             let duration = try Self.mapTiming { try format.frameRate.time(forFrame: durationFrames) }
+            try VideoFadePolicy.validate(clip: clip, timelineDuration: duration)
             let range = try Self.mapTiming { try MediaTimeRange(start: start, duration: duration) }
             builtEntries.append(TimelineIndexEntry(
                 clipID: clip.id,
@@ -175,6 +200,7 @@ public enum ProjectCommand: Equatable, Sendable {
     case moveClip(clipID: TimelineClip.ID, toIndex: Int)
     case deleteClip(clipID: TimelineClip.ID)
     case setStabilizationPasses(clipID: TimelineClip.ID, passes: [StabilizationEffect])
+    case setVideoFade(clipID: TimelineClip.ID, edge: VideoFadeEdge, fade: VideoFade?)
 
     fileprivate func apply(to project: inout ProjectState) throws {
         switch self {
@@ -260,11 +286,13 @@ public enum ProjectCommand: Equatable, Sendable {
             }
 
             project.clips[clipIndex].sourceRange = leftRange
+            project.clips[clipIndex].videoFadeOut = nil
             project.clips.insert(TimelineClip(
                 id: rightClipID,
                 assetID: clip.assetID,
                 sourceRange: rightRange,
-                stabilizationPasses: clip.stabilizationPasses
+                stabilizationPasses: clip.stabilizationPasses,
+                videoFadeOut: clip.videoFadeOut
             ), at: clipIndex + 1)
 
         case let .trimClip(clipID, sourceRange):
@@ -290,7 +318,9 @@ public enum ProjectCommand: Equatable, Sendable {
                 id: newClipID,
                 assetID: source.assetID,
                 sourceRange: source.sourceRange,
-                stabilizationPasses: source.stabilizationPasses
+                stabilizationPasses: source.stabilizationPasses,
+                videoFadeIn: source.videoFadeIn,
+                videoFadeOut: source.videoFadeOut
             ), at: clipIndex + 1)
 
         case let .moveClip(clipID, destinationIndex):
@@ -346,6 +376,17 @@ public enum ProjectCommand: Equatable, Sendable {
                 previous = effect
             }
             project.clips[clipIndex].stabilizationPasses = passes
+
+        case let .setVideoFade(clipID, edge, fade):
+            guard let clipIndex = project.clips.firstIndex(where: { $0.id == clipID }) else {
+                throw TimelineEditError.clipNotFound(clipID)
+            }
+            switch edge {
+            case .fadeIn:
+                project.clips[clipIndex].videoFadeIn = fade
+            case .fadeOut:
+                project.clips[clipIndex].videoFadeOut = fade
+            }
         }
 
         _ = try TimelineIndex(project: project)
@@ -381,6 +422,98 @@ public enum ProjectCommand: Equatable, Sendable {
         guard let parentEnd = try? parent.end(),
               let childEnd = try? child.end() else { return false }
         return child.start >= parent.start && childEnd <= parentEnd
+    }
+}
+
+public enum VideoFadePolicy {
+    public static func maximumCombinedDurationMilliseconds(
+        timelineDuration: MediaTime
+    ) throws -> Int64 {
+        let scaled = timelineDuration.value.multipliedReportingOverflow(by: 1_000)
+        guard !scaled.overflow else {
+            throw TimelineEditError.timing(.arithmeticOverflow)
+        }
+        return max(0, scaled.partialValue / Int64(timelineDuration.timescale))
+    }
+
+    public static func maximumDurationMilliseconds(
+        at edge: VideoFadeEdge,
+        for clip: TimelineClip,
+        timelineDuration: MediaTime
+    ) throws -> Int64 {
+        let total = try maximumCombinedDurationMilliseconds(
+            timelineDuration: timelineDuration
+        )
+        let opposite = switch edge {
+        case .fadeIn: clip.videoFadeOut?.durationMilliseconds ?? 0
+        case .fadeOut: clip.videoFadeIn?.durationMilliseconds ?? 0
+        }
+        return max(0, total - max(0, opposite))
+    }
+
+    public static func defaultFade(
+        at edge: VideoFadeEdge,
+        for clip: TimelineClip,
+        timelineDuration: MediaTime
+    ) throws -> VideoFade {
+        let maximum = try maximumDurationMilliseconds(
+            at: edge,
+            for: clip,
+            timelineDuration: timelineDuration
+        )
+        guard maximum > 0 else {
+            throw TimelineEditError.noVideoFadeDurationAvailable(
+                clipID: clip.id,
+                edge: edge
+            )
+        }
+        return VideoFade(durationMilliseconds: min(
+            VideoFade.defaultDurationMilliseconds,
+            maximum
+        ))
+    }
+
+    public static func validate(
+        clip: TimelineClip,
+        timelineDuration: MediaTime
+    ) throws {
+        for (edge, fade) in [
+            (VideoFadeEdge.fadeIn, clip.videoFadeIn),
+            (.fadeOut, clip.videoFadeOut),
+        ] {
+            if let fade, fade.durationMilliseconds <= 0 {
+                throw TimelineEditError.invalidVideoFadeDuration(
+                    clipID: clip.id,
+                    edge: edge,
+                    durationMilliseconds: fade.durationMilliseconds
+                )
+            }
+        }
+        let fadeIn = clip.videoFadeIn?.durationMilliseconds ?? 0
+        let fadeOut = clip.videoFadeOut?.durationMilliseconds ?? 0
+        let sum = fadeIn.addingReportingOverflow(fadeOut)
+        guard !sum.overflow else {
+            throw TimelineEditError.timing(.arithmeticOverflow)
+        }
+        let maximum = try maximumCombinedDurationMilliseconds(
+            timelineDuration: timelineDuration
+        )
+        guard sum.partialValue <= maximum else {
+            throw TimelineEditError.videoFadesExceedClipDuration(
+                clipID: clip.id,
+                totalMilliseconds: sum.partialValue,
+                maximumMilliseconds: maximum
+            )
+        }
+    }
+}
+
+public extension VideoFadeEdge {
+    var title: String {
+        switch self {
+        case .fadeIn: "Fade in"
+        case .fadeOut: "Fade out"
+        }
     }
 }
 
