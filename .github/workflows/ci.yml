@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Swift tests and app build
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      FROGMOUTH_REQUIRE_MEDIA_INTEGRATION: "1"
+      FROGMOUTH_TEST_FFMPEG_VERSION: "8.1.2"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Verify Swift toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Install FFmpeg integration dependency
+        run: |
+          brew install ffmpeg-full
+          ffmpeg_prefix="$(brew --prefix ffmpeg-full)"
+          echo "$ffmpeg_prefix/bin" >> "$GITHUB_PATH"
+          echo "FFMPEG=$ffmpeg_prefix/bin/ffmpeg" >> "$GITHUB_ENV"
+          echo "FFPROBE=$ffmpeg_prefix/bin/ffprobe" >> "$GITHUB_ENV"
+          echo "FROGMOUTH_FFMPEG=$ffmpeg_prefix/bin/ffmpeg" >> "$GITHUB_ENV"
+
+      - name: Verify FFmpeg integration dependency
+        run: |
+          actual_version="$("$FROGMOUTH_FFMPEG" -version | awk 'NR == 1 { print $3 }')"
+          test "$actual_version" = "$FROGMOUTH_TEST_FFMPEG_VERSION"
+          "$FROGMOUTH_FFMPEG" -hide_banner -filters | grep -F "vidstabdetect"
+          "$FROGMOUTH_FFMPEG" -hide_banner -filters | grep -F "vidstabtransform"
+          "$FROGMOUTH_FFMPEG" -hide_banner -encoders | grep -F "hevc_videotoolbox"
+
+      - name: Generate and verify deterministic media fixtures
+        run: ./scripts/verify-media-fixtures.sh
+
+      - name: Run test suite
+        run: swift test
+
+      - name: Build app bundle
+        run: ./scripts/build-app.sh
+
+      - name: Verify app bundle
+        run: |
+          test -x build/frogmouth.app/Contents/MacOS/frogmouth
+          plutil -lint build/frogmouth.app/Contents/Info.plist

@@ -226,15 +226,13 @@ import Testing
 }
 
 @Test func generatedFixturesRenderExactOrderedCutsWithSynchronizedAudio() async throws {
-    guard let installation = try? await FFmpegLocator().locateAndValidate() else { return }
     let fixtures = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         .appendingPathComponent(".build/test-media-fixtures", isDirectory: true)
     let baseURL = fixtures.appendingPathComponent("base-24fps-320x180.mp4")
     let wideURL = fixtures.appendingPathComponent("wide-30000-1001-426x180.mp4")
     let silentURL = fixtures.appendingPathComponent("silent-24fps-320x180.mp4")
-    guard FileManager.default.fileExists(atPath: baseURL.path),
-          FileManager.default.fileExists(atPath: wideURL.path),
-          FileManager.default.fileExists(atPath: silentURL.path) else { return }
+    guard try IntegrationTestSupport.mediaFilesExist([baseURL, wideURL, silentURL]),
+          let installation = try await IntegrationTestSupport.ffmpegInstallation() else { return }
 
     let inspector = AVProjectMediaFactsInspector()
     let base = MediaAsset(
