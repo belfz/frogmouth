@@ -4,6 +4,10 @@ import FrogmouthCore
 
 @MainActor
 final class ApplicationViewModel: ObservableObject {
+    private static let releasesURL = URL(
+        string: "https://github.com/belfz/frogmouth/releases/latest"
+    )!
+
     enum FFmpegState: Equatable {
         case checking
         case unavailable(String)
@@ -63,5 +67,9 @@ final class ApplicationViewModel: ObservableObject {
 
     func revealLogs() {
         NSWorkspace.shared.activateFileViewerSelecting([diagnostics.directory])
+    }
+
+    func checkForUpdates() {
+        NSWorkspace.shared.open(Self.releasesURL)
     }
 }

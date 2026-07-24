@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build unsigned release
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      FROGMOUTH_REQUIRE_MEDIA_INTEGRATION: "1"
+      FROGMOUTH_TEST_FFMPEG_VERSION: "8.1.2"
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate release version and runner
+        run: |
+          ./scripts/validate-version.sh "$GITHUB_REF_NAME"
+          test "$(uname -m)" = "arm64"
+          xcodebuild -version
+          swift --version
+
+      - name: Install FFmpeg integration dependency
+        run: |
+          brew install ffmpeg-full
+          ffmpeg_prefix="$(brew --prefix ffmpeg-full)"
+          echo "$ffmpeg_prefix/bin" >> "$GITHUB_PATH"
+          echo "FFMPEG=$ffmpeg_prefix/bin/ffmpeg" >> "$GITHUB_ENV"
+          echo "FFPROBE=$ffmpeg_prefix/bin/ffprobe" >> "$GITHUB_ENV"
+          echo "FROGMOUTH_FFMPEG=$ffmpeg_prefix/bin/ffmpeg" >> "$GITHUB_ENV"
+
+      - name: Verify FFmpeg integration dependency
+        run: |
+          actual_version="$("$FROGMOUTH_FFMPEG" -version | awk 'NR == 1 { print $3 }')"
+          test "$actual_version" = "$FROGMOUTH_TEST_FFMPEG_VERSION"
+          "$FROGMOUTH_FFMPEG" -hide_banner -filters | grep -F "vidstabdetect"
+          "$FROGMOUTH_FFMPEG" -hide_banner -filters | grep -F "vidstabtransform"
+          "$FROGMOUTH_FFMPEG" -hide_banner -encoders | grep -F "hevc_videotoolbox"
+
+      - name: Generate and verify deterministic media fixtures
+        run: ./scripts/verify-media-fixtures.sh
+
+      - name: Run test suite
+        run: swift test
+
+      - name: Build and package application
+        run: |
+          FROGMOUTH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" ./scripts/build-app.sh
+          ./scripts/verify-app-bundle.sh
+          ./scripts/package-release.sh
+          ./scripts/render-release-notes.sh "$GITHUB_REF_NAME" > build/releases/RELEASE_NOTES.md
+
+      - name: Preserve release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frogmouth-${{ github.ref_name }}-unsigned
+          path: build/releases
+          if-no-files-found: error
+
+      - name: Create or update draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(./scripts/validate-version.sh "$GITHUB_REF_NAME")"
+          title="frogmouth $version"
+          notes="build/releases/RELEASE_NOTES.md"
+          assets=(
+            "build/releases/frogmouth-$version-macos-arm64.dmg"
+            "build/releases/frogmouth-$version-macos-arm64.zip"
+            "build/releases/SHA256SUMS.txt"
+          )
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            is_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)"
+            if [[ "$is_draft" != "true" ]]; then
+              echo "Refusing to replace assets on published release $GITHUB_REF_NAME." >&2
+              exit 1
+            fi
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+            gh release edit "$GITHUB_REF_NAME" \
+              --draft \
+              --verify-tag \
+              --title "$title" \
+              --notes-file "$notes"
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+              --draft \
+              --verify-tag \
+              --title "$title" \
+              --notes-file "$notes"
+          fi

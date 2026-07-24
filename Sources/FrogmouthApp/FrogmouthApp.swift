@@ -55,6 +55,9 @@ struct FrogmouthApp: App {
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(!document.canRedo || document.isBusy)
             }
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…", action: application.checkForUpdates)
+            }
             CommandMenu("Clip") {
                 Button("Split at Playhead (C)", action: document.splitSelectedClip)
                     .disabled(!document.canSplitSelectedClip)

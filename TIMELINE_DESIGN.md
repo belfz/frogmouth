@@ -211,7 +211,7 @@ Illustrative shape:
 }
 ```
 
-Schema version 2 is locked by the human-readable [`ProjectSchemaV2.frogmouth`](Tests/Fixtures/ProjectSchemaV2.frogmouth) fixture and deterministic round-trip tests. It adds optional per-clip `videoFadeIn` and `videoFadeOut` objects with integer millisecond durations. Unknown future fields are ignored where safe; a newer unsupported `schemaVersion` produces an actionable error before partial decoding. Because frogmouth is still pre-release, schema 2 directly replaces schema 1 without a migration and older projects are refused. Future migration policy will be established before a production release.
+Schema version 2 is locked by the human-readable [`ProjectSchemaV2.frogmouth`](Tests/Fixtures/ProjectSchemaV2.frogmouth) fixture and deterministic round-trip tests. It adds optional per-clip `videoFadeIn` and `videoFadeOut` objects with integer millisecond durations. Unknown future fields are ignored where safe; a newer unsupported `schemaVersion` produces an actionable error before partial decoding. Schema 2 is the stable 1.0 baseline and the first released project format. Every future released schema must continue decoding it directly or provide an explicit migration before any in-memory project is returned.
 
 ### Paths and missing sources
 
@@ -329,7 +329,7 @@ Processing looks up each artifact before running FFmpeg, so reopening a project,
 
 | Compatibility boundary | Release value | Behavior when it changes |
 | --- | ---: | --- |
-| `.frogmouth` JSON schema | `2` | Newer schemas are refused before partial decode; schema 1 is intentionally unsupported during pre-release development. |
+| `.frogmouth` JSON schema | `2` | Schema 2 is the stable 1.0 baseline. Newer schemas are refused before partial decode; future releases must retain compatibility or provide explicit migration. |
 | Cache manifest schema | `1` | Unsupported manifests are disposable stale cache entries and are rebuilt on demand. |
 | Stabilization processing revision | `1` | Existing passes become stale and require **Update Stabilization**. |
 | Original-source thumbnail processing revision | `1` | Existing thumbnails miss the new identity and are regenerated lazily. |

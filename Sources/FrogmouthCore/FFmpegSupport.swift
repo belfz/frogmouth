@@ -28,12 +28,14 @@ public protocol FFmpegLocating: Sendable {
 }
 
 public struct FFmpegLocator: FFmpegLocating, @unchecked Sendable {
+    public static let testedVersions: Set<String> = ["7.1.1", "8.1.2"]
+
     private let fileManager: FileManager
     private let supportedVersions: Set<String>
 
     public init(
         fileManager: FileManager = .default,
-        supportedVersions: Set<String> = ["7.1.1"]
+        supportedVersions: Set<String> = Self.testedVersions
     ) {
         self.fileManager = fileManager
         self.supportedVersions = supportedVersions

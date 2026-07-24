@@ -8,6 +8,10 @@
 
 frogmouth is a macOS app for quickly assembling, trimming, splitting, and stabilizing a gapless sequence of video clips, then exporting the complete timeline as a smaller, high-quality HEVC file.
 
+Version `1.0.0` is the first stable release. User-visible changes are recorded in
+[CHANGELOG.md](CHANGELOG.md), and the versioning, packaging, and release process
+is documented in [RELEASING.md](RELEASING.md).
+
 The project was initially designed and developed with Canon EOS R5 footage in mind—primarily 4K H.264 MP4 files with AAC audio. Those videos remain its principal development and testing material, while the application UI is intentionally camera-agnostic. Other formats that FFmpeg can decode are supported on a best-effort basis unless documented otherwise.
 
 The active single-track editor is specified in [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md). Stabilization latency, benchmarks, alternatives, and optimization decisions are tracked in [STABILIZATION_PERFORMANCE.md](STABILIZATION_PERFORMANCE.md).
@@ -25,7 +29,23 @@ Stabilization is intentionally blocking in the first timeline release: analysis 
 5. Preview the timeline, then export the complete sequence as a high-quality HEVC MP4. Export defaults to the project directory, or the first used source directory for an unsaved project.
 6. If processing or export behaves unexpectedly, use **Diagnostics → Copy Diagnostics** or **Reveal Logs in Finder**.
 
-Project schema `2`, cache-manifest schema `1`, stabilization-processing revision `1`, and thumbnail-processing revision `1` define the current pre-release compatibility boundary. Schema 2 intentionally replaces schema 1 without migration while frogmouth remains pre-release; cache revisions are disposable and rebuild automatically. Details are in [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md#first-timeline-release-compatibility-record).
+Project schema `2`, cache-manifest schema `1`, stabilization-processing revision `1`, and thumbnail-processing revision `1` define the stable 1.0 compatibility boundary. Schema 2 is the first released project format; future released schema changes must retain compatibility or provide an explicit migration. Cache revisions are disposable and rebuild automatically. Details are in [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md#first-timeline-release-compatibility-record).
+
+## Installing a release
+
+Download the Apple-silicon DMG or ZIP from
+[GitHub Releases](https://github.com/belfz/frogmouth/releases). The current
+build is intentionally unsigned and not notarized. After copying frogmouth to
+Applications and attempting to open it, macOS may require you to approve it
+under **System Settings → Privacy & Security → Open Anyway**.
+
+frogmouth requires an external FFmpeg 7.1.1 or 8.1.2 installation containing
+`vidstabdetect`, `vidstabtransform`, and `hevc_videotoolbox`. The app verifies
+the executable and exact version at startup. Restart frogmouth after installing
+or changing FFmpeg.
+
+Updates are manual in 1.0. Use **frogmouth → Check for Updates…** to open the
+latest GitHub Release.
 
 ## Development
 
@@ -33,7 +53,7 @@ Requirements:
 
 - Apple-silicon Mac running macOS 15 or newer
 - Xcode 26 / Swift 6
-- The tested FFmpeg 7.1.1 build containing `vidstabdetect`, `vidstabtransform`, and `hevc_videotoolbox`
+- FFmpeg 7.1.1 or 8.1.2 containing `vidstabdetect`, `vidstabtransform`, and `hevc_videotoolbox`
 
 Open `Package.swift` in Xcode and run the `frogmouth` executable scheme, or use:
 
@@ -47,7 +67,17 @@ Build a local, unsigned app bundle with:
 ./scripts/build-app.sh
 ```
 
-The result is `build/frogmouth.app`. Run tests with `swift test`.
+The result is `build/frogmouth.app`. `VERSION` supplies the user-visible app
+version; `FROGMOUTH_BUILD_NUMBER` may override the default Git commit-count
+build number. Run tests with `swift test`.
+
+Package the built application as an unsigned DMG and ZIP with checksums:
+
+```sh
+./scripts/package-release.sh
+```
+
+The artifacts are written to `build/releases`.
 
 Pull requests and pushes to `main` run the complete suite on a macOS 15 Apple-silicon
 runner. CI generates and verifies deterministic media fixtures, exercises FFmpeg-backed
@@ -75,7 +105,7 @@ frogmouth verifies FFmpeg only at startup. When setup is required, install the d
 - Custom timeline canvas settings, proper SDR/HDR/Log conversion, and broader colour management.
 - Folder-assisted missing-media search and an in-app Relink workflow.
 - Broader, tested format-support tiers beyond Canon-style MP4.
-- A maintained supported-FFmpeg list and smoother update guidance.
+- Broaden the maintained supported-FFmpeg list and improve update guidance.
 - Reconsider bundled FFmpeg only if convenience outweighs release size, licensing, update, and signing burden.
 - Batch/CLI automation and a macOS sharing workflow.
-- Add code signing and notarization before distributing frogmouth outside a local development build.
+- Add Developer ID signing and notarization before broader public or commercial distribution.

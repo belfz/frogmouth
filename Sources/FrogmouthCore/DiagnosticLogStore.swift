@@ -6,7 +6,10 @@ public final class DiagnosticLogStore: @unchecked Sendable {
     private let queue = DispatchQueue(label: "dev.frogmouth.diagnostics", qos: .utility)
     private let formatter = ISO8601DateFormatter()
 
-    public init(baseDirectory: URL? = nil) {
+    public init(
+        baseDirectory: URL? = nil,
+        buildInfo: ApplicationBuildInfo = .current()
+    ) {
         let root = baseDirectory ?? FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -14,7 +17,12 @@ public final class DiagnosticLogStore: @unchecked Sendable {
         directory = root
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         fileURL = root.appendingPathComponent("frogmouth.log")
-        append(level: "INFO", sessionID: "app", phase: "startup", message: Self.systemDescription())
+        append(
+            level: "INFO",
+            sessionID: "app",
+            phase: "startup",
+            message: Self.systemDescription(buildInfo: buildInfo)
+        )
     }
 
     public func append(level: String, sessionID: String, phase: String, message: String) {
@@ -105,9 +113,14 @@ public final class DiagnosticLogStore: @unchecked Sendable {
         return encoded
     }
 
-    private static func systemDescription() -> String {
+    private static func systemDescription(buildInfo: ApplicationBuildInfo) -> String {
         let info = ProcessInfo.processInfo
-        return "frogmouth=development macOS=\(info.operatingSystemVersionString) architecture=\(architecture)"
+        return [
+            "frogmouth_version=\(buildInfo.version)",
+            "frogmouth_build=\(buildInfo.build)",
+            "macOS=\(info.operatingSystemVersionString)",
+            "architecture=\(architecture)",
+        ].joined(separator: " ")
     }
 
     private static var architecture: String {
