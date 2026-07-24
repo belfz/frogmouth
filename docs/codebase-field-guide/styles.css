@@ -250,11 +250,10 @@ main { min-height: calc(100vh - 118px); }
 h1, h2, p { margin-top: 0; }
 h1 {
   margin-bottom: 20px;
-  font-size: clamp(42px, 6vw, 76px);
-  line-height: .98;
-  letter-spacing: -.055em;
+  font-size: clamp(36px, 5vw, 58px);
+  line-height: 1.06;
+  letter-spacing: -.045em;
 }
-h1 em { color: var(--muted); font-style: normal; font-weight: 420; }
 h2 { letter-spacing: -.025em; }
 .lede { max-width: 760px; color: var(--muted); font-size: clamp(17px, 2vw, 21px); line-height: 1.6; }
 

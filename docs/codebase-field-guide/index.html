@@ -97,9 +97,9 @@
         <section class="chapter is-active" id="orientation" data-title="Orientation">
           <div class="chapter-heading hero-heading">
             <div>
-              <span class="kicker">Start here · 5 minutes</span>
-              <h1>Learn Frogmouth as a system,<br><em>not a pile of Swift.</em></h1>
-              <p class="lede">Frogmouth is a native macOS editor whose saved project is a list of decisions. Swift owns the experience and the editing model; AVFoundation previews those decisions; FFmpeg turns them into durable media.</p>
+              <span class="kicker">Chapter 01 · Architectural overview</span>
+              <h1>How Frogmouth is organized</h1>
+              <p class="lede">This chapter introduces the main architectural boundaries. Frogmouth stores editing decisions in a project, uses Swift for the application and editing model, builds interactive previews with AVFoundation, and delegates stabilization and export rendering to FFmpeg.</p>
               <div class="hero-actions">
                 <button class="primary-button" data-jump="structure">Begin the guided tour <span>→</span></button>
                 <button class="secondary-button" data-jump="runtime">Trace a feature</button>
@@ -123,31 +123,31 @@
           <div class="mental-model">
             <article class="model-card rust">
               <span class="model-index">01</span>
-              <h2>The project is decisions</h2>
+              <h2>Persisted project state</h2>
               <p><code>.frogmouth</code> JSON stores sources, ordered clips, trim ranges, stabilization effects, fades, and timeline format. It never embeds or mutates source media.</p>
             </article>
             <article class="model-card blue">
               <span class="model-index">02</span>
-              <h2>Edits are commands</h2>
+              <h2>Editing commands and history</h2>
               <p>Every durable timeline mutation passes through <code>ProjectCommand</code> and <code>ProjectEditor</code>, so validation, undo/redo, and autosave agree.</p>
             </article>
             <article class="model-card green">
               <span class="model-index">03</span>
-              <h2>Heavy work is replaceable</h2>
+              <h2>External processing and service boundaries</h2>
               <p>Protocols isolate inspection, file writing, thumbnail generation, and FFmpeg execution. Actors serialize disk state; fakes make the difficult paths testable.</p>
             </article>
           </div>
 
           <aside class="callout">
-            <strong>The useful architectural label</strong>
+            <strong>Architecture summary</strong>
             <p>“MVVM-ish” is true but incomplete. A better description is <strong>command-driven domain core + actor-isolated services + a main-actor application coordinator + declarative SwiftUI views</strong>.</p>
           </aside>
         </section>
 
         <section class="chapter" id="structure" data-title="Project structure">
           <div class="chapter-heading">
-            <span class="kicker">Chapter 02 · Shape of the repository</span>
-            <h1>Three targets.<br><em>One-way dependencies.</em></h1>
+            <span class="kicker">Chapter 02 · Swift package and directories</span>
+            <h1>Project targets and directory structure</h1>
             <p class="lede">Swift Package Manager is the project definition—there is no checked-in Xcode project. The executable UI depends on the reusable core; the benchmark also depends on the core; tests target the core directly.</p>
           </div>
 
@@ -195,7 +195,7 @@
           </div>
 
           <div class="section-heading">
-            <div><span class="kicker">Repository map</span><h2>What lives where</h2></div>
+            <div><span class="kicker">Repository map</span><h2>Responsibilities of each directory</h2></div>
             <span class="hint">Click a path to copy it</span>
           </div>
           <div class="tree-grid">
@@ -236,8 +236,8 @@
 
         <section class="chapter" id="runtime" data-title="Runtime journeys">
           <div class="chapter-heading">
-            <span class="kicker">Chapter 03 · Follow the work</span>
-            <h1>Trace a feature<br><em>end to end.</em></h1>
+            <span class="kicker">Chapter 03 · Application flow</span>
+            <h1>How user actions move through the application</h1>
             <p class="lede">Select a journey. Each step names the abstraction responsible, the state boundary crossed, and the source file where the behavior lives.</p>
           </div>
 
@@ -256,8 +256,8 @@
           <div class="operation-lab">
             <div class="operation-lab-heading">
               <div>
-                <span class="kicker">Operation microscope</span>
-                <h2>What happens under the hood?</h2>
+                <span class="kicker">Operation details</span>
+                <h2>Editing and filesystem effects by operation</h2>
                 <p>Follow one user action across memory, project state, preview, and the filesystem.</p>
               </div>
               <div class="operation-picker" role="tablist" aria-label="Editing operation">
@@ -279,9 +279,9 @@
 
         <section class="chapter" id="domain" data-title="Domain &amp; editing">
           <div class="chapter-heading">
-            <span class="kicker">Chapter 04 · The source of truth</span>
-            <h1>A small model with<br><em>strong invariants.</em></h1>
-            <p class="lede">The durable state is deliberately boring: Codable value types with stable IDs and rational time. Complexity lives in validation and transformations, not hidden object graphs.</p>
+            <span class="kicker">Chapter 04 · Persisted and transient state</span>
+            <h1>Project data and timeline editing</h1>
+            <p class="lede"><code>ProjectState</code> and its related Codable value types contain the durable editing state. Stable IDs connect media and clips, rational time represents frame boundaries, and centralized validation prevents invalid project snapshots from being committed.</p>
           </div>
 
           <div class="domain-stack">
@@ -309,8 +309,8 @@
 
           <div class="two-column">
             <article class="panel">
-              <span class="kicker">The command gate</span>
-              <h2>One path for durable edits</h2>
+              <span class="kicker">Durable edit flow</span>
+              <h2>All durable edits use ProjectCommand</h2>
               <pre><code>View gesture
   → ProjectCommand
   → ProjectEditor.apply(_:)
@@ -321,8 +321,8 @@
               <p>Imports, insertion, split, trim, duplicate, move, delete, stabilization, and fades all use this path. Undo/redo restores validated project snapshots rather than attempting inverse media operations.</p>
             </article>
             <article class="panel">
-              <span class="kicker">The exception that proves it</span>
-              <h2>Trim is a transaction</h2>
+              <span class="kicker">Trim-specific behavior</span>
+              <h2>Trimming uses a temporary transaction</h2>
               <p>Pointer movement needs live feedback without adding hundreds of undo entries. A <code>TrimTransaction</code> keeps a pending range; commit emits one durable command; cancel restores the original.</p>
               <div class="mini-timeline" aria-label="Trim transaction illustration">
                 <span class="trimmed">discard</span><span class="kept">pending visible range</span><span class="trimmed">discard</span>
@@ -342,9 +342,9 @@
 
         <section class="chapter" id="media" data-title="Media engine">
           <div class="chapter-heading">
-            <span class="kicker">Chapter 05 · Two engines, explicit contracts</span>
-            <h1>Preview is not export.<br><em>They share a model.</em></h1>
-            <p class="lede">Frogmouth does not try to make AVFoundation and FFmpeg behave identically by accident. It builds explicit plans from the same project invariants and validates the final output.</p>
+            <span class="kicker">Chapter 05 · AVFoundation and FFmpeg</span>
+            <h1>Preview, stabilization, and export pipelines</h1>
+            <p class="lede">AVFoundation builds the interactive preview composition, while FFmpeg performs stabilization and final export. Both pipelines read the same validated project model, but each has its own planning, execution, and validation code.</p>
           </div>
 
           <div class="engine-compare">
@@ -382,7 +382,7 @@
           <div class="two-column">
             <article class="panel">
               <span class="kicker">Cache identity</span>
-              <h2>Generated, validated, disposable</h2>
+              <h2>How generated artifacts are identified</h2>
               <p>SHA-256 keys include source fingerprint, processing revision, FFmpeg tool revision, and ordered parameters. A manifest records the artifact filename and byte count. Any mismatch becomes a typed stale reason.</p>
               <pre><code>identity → sorted JSON → SHA-256 key
          ↘ artifact + manifest.json
@@ -390,8 +390,8 @@ change source / tool / algorithm / params
          → stale → regenerate</code></pre>
             </article>
             <article class="panel warning-panel">
-              <span class="kicker">Important invariant</span>
-              <h2>Never trust an output because FFmpeg exited 0</h2>
+              <span class="kicker">Export validation</span>
+              <h2>FFmpeg completion is followed by media validation</h2>
               <p><code>TimelineExporter</code> writes to a unique partial file, reinspects it, validates the media facts and provenance, checks cancellation again, then finalizes atomically.</p>
               <p class="fine-print">This is why failures should retain actionable diagnostics but not leave a plausible-looking final file.</p>
             </article>
@@ -400,8 +400,8 @@ change source / tool / algorithm / params
 
         <section class="chapter" id="ui" data-title="UI architecture">
           <div class="chapter-heading">
-            <span class="kicker">Chapter 06 · Native macOS composition</span>
-            <h1>SwiftUI describes.<br><em>AppKit fills the gaps.</em></h1>
+            <span class="kicker">Chapter 06 · SwiftUI and AppKit</span>
+            <h1>User interface structure and macOS integration</h1>
             <p class="lede">The UI is declarative at the edges, but the product needs native panels, window interception, AVPlayer hosting, keyboard monitoring, and precise scrolling. Small representables bridge those platform surfaces.</p>
           </div>
 
@@ -456,9 +456,9 @@ change source / tool / algorithm / params
 
         <section class="chapter" id="swift" data-title="Swift style">
           <div class="chapter-heading">
-            <span class="kicker">Chapter 07 · House style</span>
-            <h1>Value semantics first.<br><em>Isolation at the edges.</em></h1>
-            <p class="lede">The code favors explicit types and compiler-enforced concurrency over frameworks or clever abstraction. Most dependencies are plain initializers with protocol-typed defaults.</p>
+            <span class="kicker">Chapter 07 · Code conventions</span>
+            <h1>Swift conventions and framework usage</h1>
+            <p class="lede">This chapter describes the recurring implementation patterns: value types for project state, typed errors, protocols at I/O boundaries, actors for mutable services, main-actor UI state, cancellation, and generation checks.</p>
           </div>
 
           <div class="pattern-grid">
@@ -530,8 +530,8 @@ guard current == generation
 
         <section class="chapter" id="tests" data-title="Testing">
           <div class="chapter-heading">
-            <span class="kicker">Chapter 08 · Evidence pyramid</span>
-            <h1>Fast invariants below.<br><em>Real media above.</em></h1>
+            <span class="kicker">Chapter 08 · Test suite</span>
+            <h1>Test organization and testing patterns</h1>
             <p class="lede">All 110 cases use Apple’s Swift Testing package: free functions annotated with <code>@Test</code>, <code>#expect</code> for assertions, and <code>#require</code> for safe unwrapping.</p>
           </div>
 
@@ -599,8 +599,8 @@ guard current == generation
 
           <div class="testing-pattern">
             <div>
-              <span class="kicker">Typical pattern</span>
-              <h2>Arrange with value fixtures, inject the boundary, assert the contract</h2>
+              <span class="kicker">Typical test structure</span>
+              <h2>Use value fixtures, inject I/O boundaries, and assert observable behavior</h2>
             </div>
             <pre><code>@Test func cancellingExportLeavesNoFinalFile() async throws {
     let runner = CancellingFFmpegRunner()
@@ -616,8 +616,8 @@ guard current == generation
 
         <section class="chapter" id="config" data-title="Configuration">
           <div class="chapter-heading">
-            <span class="kicker">Chapter 09 · Configuration without a maze</span>
-            <h1>Source-controlled defaults.<br><em>Environment at the seams.</em></h1>
+            <span class="kicker">Chapter 09 · Project and environment settings</span>
+            <h1>Build, CI, and release configuration</h1>
             <p class="lede">There is no runtime preferences framework yet. Product, build, compatibility, CI, and release settings are intentionally visible in a handful of files.</p>
           </div>
 
@@ -631,7 +631,7 @@ guard current == generation
           </div>
 
           <div class="commands-board">
-            <div class="section-heading"><div><span class="kicker">Daily commands</span><h2>The working set</h2></div></div>
+            <div class="section-heading"><div><span class="kicker">Daily commands</span><h2>Commands used during development</h2></div></div>
             <button data-copy="swift test"><code>swift test</code><span>Fast local suite; media-backed tests run when prerequisites exist.</span></button>
             <button data-copy="FROGMOUTH_REQUIRE_MEDIA_INTEGRATION=1 swift test"><code>FROGMOUTH_REQUIRE_MEDIA_INTEGRATION=1 swift test</code><span>Require all real-media paths.</span></button>
             <button data-copy="./scripts/build-app.sh"><code>./scripts/build-app.sh</code><span>Build the unsigned app at build/frogmouth.app.</span></button>
@@ -654,9 +654,9 @@ guard current == generation
 
         <section class="chapter" id="contribute" data-title="Change safely">
           <div class="chapter-heading">
-            <span class="kicker">Chapter 10 · Human + AI operating manual</span>
-            <h1>Know where to cut.<br><em>Know what must remain true.</em></h1>
-            <p class="lede">You do not need to type every line to own the system. Your leverage is choosing the behavior, recognizing the boundary, demanding the right evidence, and reviewing invariants rather than syntax alone.</p>
+            <span class="kicker">Chapter 10 · Contribution workflow</span>
+            <h1>How to make and review code changes</h1>
+            <p class="lede">This chapter explains how to locate the responsible subsystem for a proposed change, which invariants should remain true, which tests should provide evidence, and what to check when reviewing AI-authored code.</p>
           </div>
 
           <div class="change-router">
@@ -685,8 +685,8 @@ guard current == generation
 
           <div class="review-checklist">
             <div>
-              <span class="kicker">Review the AI at the right altitude</span>
-              <h2>Six questions beat a line-by-line syntax audit</h2>
+              <span class="kicker">Review checklist for AI-authored changes</span>
+              <h2>Questions to answer during code review</h2>
             </div>
             <ol>
               <li><span>1</span><p><strong>Which durable model changed?</strong> If none, why does persistence code move?</p></li>
@@ -713,7 +713,7 @@ guard current == generation
 
           <aside class="finish-card">
             <img src="../../Sources/FrogmouthApp/Resources/FrogmouthMark.png" alt="" width="80" height="80">
-            <div><span class="kicker">You now have the map</span><h2>Use the code to answer details, not to rediscover the architecture.</h2><p>Return here through the chapter rail, search, or the change router whenever an AI-authored diff touches unfamiliar territory.</p></div>
+            <div><span class="kicker">Using this guide later</span><h2>Return to the relevant subsystem before reviewing an unfamiliar change.</h2><p>Use the chapter rail, search, or change router to identify the responsible files, invariants, and expected tests for future AI-authored work.</p></div>
           </aside>
         </section>
       </main>
