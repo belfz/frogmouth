@@ -58,7 +58,7 @@
         </button>
         <button class="chapter-link" data-target="tests">
           <span class="chapter-number">08</span>
-          <span><strong>Testing</strong><small>110 tests, six layers</small></span>
+          <span><strong>Testing</strong><small>Unit through integration tests</small></span>
         </button>
         <button class="chapter-link" data-target="config">
           <span class="chapter-number">09</span>
@@ -113,11 +113,9 @@
             </div>
           </div>
 
-          <div class="stat-grid" aria-label="Codebase statistics">
-            <article><strong>3</strong><span>SwiftPM targets</span><small>Core · App · Benchmark</small></article>
-            <article><strong>0</strong><span>third-party Swift packages</span><small>Apple frameworks + FFmpeg process</small></article>
-            <article><strong>110</strong><span>Swift Testing cases</span><small>unit through real-media integration</small></article>
-            <article><strong>2</strong><span>rendering engines</span><small>AVFoundation preview · FFmpeg output</small></article>
+          <div class="architecture-facts">
+            <p><strong>Swift dependencies:</strong> the package has no third-party Swift dependencies. It uses Apple system frameworks, while FFmpeg is invoked as a separately installed process.</p>
+            <p><strong>Media rendering:</strong> AVFoundation builds interactive previews, and FFmpeg performs stabilization processing and final export.</p>
           </div>
 
           <div class="mental-model">
@@ -209,7 +207,7 @@
               </div>
               <div class="tree-branch">
                 <span class="folder">Tests/</span>
-                <button data-copy="Tests/FrogmouthCoreTests"><span>✓</span><strong>FrogmouthCoreTests/</strong><small>110 Swift Testing cases</small></button>
+                <button data-copy="Tests/FrogmouthCoreTests"><span>✓</span><strong>FrogmouthCoreTests/</strong><small>Swift Testing test target</small></button>
                 <button data-copy="Tests/Fixtures"><span>▧</span><strong>Fixtures/</strong><small>schema contract + generated media</small></button>
                 <button data-copy="Tests/Performance"><span>⌁</span><strong>Performance/</strong><small>recorded guardrails</small></button>
               </div>
@@ -532,7 +530,7 @@ guard current == generation
           <div class="chapter-heading">
             <span class="kicker">Chapter 08 · Test suite</span>
             <h1>Test organization and testing patterns</h1>
-            <p class="lede">All 110 cases use Apple’s Swift Testing package: free functions annotated with <code>@Test</code>, <code>#expect</code> for assertions, and <code>#require</code> for safe unwrapping.</p>
+            <p class="lede">The test suite uses Apple’s Swift Testing package: free functions annotated with <code>@Test</code>, <code>#expect</code> for assertions, and <code>#require</code> for safe unwrapping.</p>
           </div>
 
           <div class="test-filter" role="group" aria-label="Filter test types">
