@@ -68,6 +68,12 @@ public extension DiagnosticLogStore {
                     "asset_id": clip.assetID.uuidString,
                     "source_range": clip.sourceRange.diagnosticDescription,
                     "stabilization_pass_count": String(clip.stabilizationPasses.count),
+                    "video_fade_in_ms": clip.videoFadeIn.map {
+                        String($0.durationMilliseconds)
+                    } ?? "<none>",
+                    "video_fade_out_ms": clip.videoFadeOut.map {
+                        String($0.durationMilliseconds)
+                    } ?? "<none>",
                 ]
             )
             for (passIndex, effect) in clip.stabilizationPasses.enumerated() {
@@ -142,6 +148,12 @@ public extension DiagnosticLogStore {
                     "source_audio": String(clip.hasSourceAudio),
                     "audio_fade_in": String(clip.audioFadeInDuration),
                     "audio_fade_out": String(clip.audioFadeOutDuration),
+                    "video_fade_in_ms": clip.videoFadeIn.map {
+                        String($0.durationMilliseconds)
+                    } ?? "<none>",
+                    "video_fade_out_ms": clip.videoFadeOut.map {
+                        String($0.durationMilliseconds)
+                    } ?? "<none>",
                     "stabilization_pass_count": String(clip.stabilizationPasses.count),
                 ]
             )
@@ -239,6 +251,7 @@ public extension ProjectCommand {
         case .moveClip: "move-clip"
         case .deleteClip: "delete-clip"
         case .setStabilizationPasses: "set-stabilization-passes"
+        case .setVideoFade: "set-video-fade"
         }
     }
 
@@ -284,6 +297,12 @@ public extension ProjectCommand {
                 "pass_count": String(passes.count),
                 "effect_ids": passes.map { $0.id.uuidString }.joined(separator: ","),
             ]
+        case let .setVideoFade(clipID, edge, fade):
+            [
+                "clip_id": clipID.uuidString,
+                "edge": edge.rawValue,
+                "duration_ms": fade.map { String($0.durationMilliseconds) } ?? "<none>",
+            ]
         }
     }
 
@@ -293,6 +312,12 @@ public extension ProjectCommand {
             "asset_id": clip.assetID.uuidString,
             "source_range": clip.sourceRange.diagnosticDescription,
             "stabilization_pass_count": String(clip.stabilizationPasses.count),
+            "video_fade_in_ms": clip.videoFadeIn.map {
+                String($0.durationMilliseconds)
+            } ?? "<none>",
+            "video_fade_out_ms": clip.videoFadeOut.map {
+                String($0.durationMilliseconds)
+            } ?? "<none>",
         ]
     }
 }

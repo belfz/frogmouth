@@ -250,6 +250,27 @@ public struct PlaybackCompositionBuilder: Sendable {
             )
             let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideo)
             layer.setTransform(transform, at: timelineRange.start)
+            if let fade = clip.videoFadeIn {
+                layer.setOpacityRamp(
+                    fromStartOpacity: 0,
+                    toEndOpacity: 1,
+                    timeRange: CMTimeRange(
+                        start: timelineRange.start,
+                        duration: try fade.duration.cmTime
+                    )
+                )
+            }
+            if let fade = clip.videoFadeOut {
+                let fadeDuration = try fade.duration.cmTime
+                layer.setOpacityRamp(
+                    fromStartOpacity: 1,
+                    toEndOpacity: 0,
+                    timeRange: CMTimeRange(
+                        start: CMTimeSubtract(CMTimeRangeGetEnd(timelineRange), fadeDuration),
+                        duration: fadeDuration
+                    )
+                )
+            }
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = timelineRange
             instruction.backgroundColor = CGColor.black

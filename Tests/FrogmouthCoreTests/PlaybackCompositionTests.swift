@@ -87,6 +87,59 @@ func playbackSourceOverrideDoesNotChangeLogicalTimelineMapping() async throws {
     #expect(location.sourceTime == expectedSourceTime)
 }
 
+@Test
+func playbackCompositionAppliesIndependentVideoOpacityRampsWithoutChangingAudio() async throws {
+    let fixture = try await makeStandardPlaybackFixture()
+    var project = fixture.project
+    project.clips[0].videoFadeIn = VideoFade(durationMilliseconds: 500)
+    project.clips[0].videoFadeOut = VideoFade(durationMilliseconds: 250)
+    let result = try await PlaybackCompositionBuilder().build(
+        PlaybackBuildRequest(project: project, mediaURLs: fixture.mediaURLs)
+    )
+    let instruction = try #require(
+        result.videoComposition.instructions.first
+            as? AVMutableVideoCompositionInstruction
+    )
+    let layer = try #require(
+        instruction.layerInstructions.first
+            as? AVMutableVideoCompositionLayerInstruction
+    )
+
+    var startOpacity: Float = -1
+    var endOpacity: Float = -1
+    var rampRange = CMTimeRange.invalid
+    #expect(layer.getOpacityRamp(
+        for: .zero,
+        startOpacity: &startOpacity,
+        endOpacity: &endOpacity,
+        timeRange: &rampRange
+    ))
+    #expect(startOpacity == 0)
+    #expect(endOpacity == 1)
+    #expect(rampRange == CMTimeRange(
+        start: .zero,
+        duration: try MediaTime(value: 500, timescale: 1_000).cmTime
+    ))
+
+    let firstClipDuration = try fixture.baseRate.time(forFrame: 24)
+    let fadeOutStart = try firstClipDuration.subtracting(
+        MediaTime(value: 250, timescale: 1_000)
+    )
+    #expect(layer.getOpacityRamp(
+        for: fadeOutStart.cmTime,
+        startOpacity: &startOpacity,
+        endOpacity: &endOpacity,
+        timeRange: &rampRange
+    ))
+    #expect(startOpacity == 1)
+    #expect(endOpacity == 0)
+    #expect(rampRange == CMTimeRange(
+        start: fadeOutStart.cmTime,
+        duration: try MediaTime(value: 250, timescale: 1_000).cmTime
+    ))
+    #expect(result.audioMix.inputParameters.count == 3)
+}
+
 private struct StandardPlaybackFixture {
     let project: ProjectState
     let mediaURLs: [MediaAsset.ID: URL]

@@ -133,6 +133,8 @@ All structural edits snap to timeline frame boundaries. When a source frame rate
 
 Split takes a frame offset within the selected clip, maps it to the nearest source frame, and verifies that the two independently conformed children contain exactly the requested left/right timeline-frame counts. A boundary that cannot be represented at the source rate is refused rather than moving the cut or changing total duration silently. Both children cover the parent source range exactly and inherit its complete stabilization-pass array.
 
+Each clip may independently carry an optional picture-only fade-in from black and fade-out to black, stored as positive integer millisecond durations. Their sum may not exceed the conformed timeline duration. Trims and splits that would violate that invariant are refused. Split children retain only the original outer-edge fades, while duplication preserves both. Fade edits are ordinary undoable project commands and never invalidate stabilization because playback and export apply them after stabilization and final image normalization.
+
 The implemented rounding policies are explicitly named `towardNegativeInfinity`, `towardPositiveInfinity`, and `nearestTiesAwayFromZero`; timeline duration conformance and ordinary playhead/source mapping use the latter. `HH:MM:SS:FF` uses nominal-rate, non-drop-frame counting, including for 24000/1001, 30000/1001, and 60000/1001. A later drop-frame display, if desired, must be a separate explicit format using a semicolon rather than silently changing persisted timing.
 
 The exact source range remains expressed in its native rational time. Its timeline duration is the nearest whole number of timeline frames, so conformance can adjust duration by at most half a timeline frame. AVFoundation scales the inserted composition segment—including linked audio—to that snapped duration. FFmpeg applies the equivalent frame-rate/timestamp normalization and a matching audio tempo adjustment. This avoids fractional final frames and keeps every cut addressable by `HH:MM:SS:FF`.
@@ -147,7 +149,7 @@ Illustrative shape:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "A-PROJECT-UUID",
   "name": "Wildlife Morning",
   "mediaLibrary": [
@@ -201,13 +203,15 @@ Illustrative shape:
         "start": { "value": 0, "timescale": 1 },
         "duration": { "value": 10, "timescale": 1 }
       },
-      "stabilizationPasses": []
+      "stabilizationPasses": [],
+      "videoFadeIn": { "durationMilliseconds": 1000 },
+      "videoFadeOut": { "durationMilliseconds": 750 }
     }
   ]
 }
 ```
 
-Schema version 1 is locked by the human-readable [`ProjectSchemaV1.frogmouth`](Tests/Fixtures/ProjectSchemaV1.frogmouth) fixture and deterministic round-trip tests. Unknown future fields are ignored where safe; a newer unsupported `schemaVersion` produces an actionable error before partial decoding. `ProjectMigration` and `ProjectMigrationPipeline` define the required sequential migration boundary even though version 1 has no predecessor. Each future schema change requires an explicit migration and before/after fixture.
+Schema version 2 is locked by the human-readable [`ProjectSchemaV2.frogmouth`](Tests/Fixtures/ProjectSchemaV2.frogmouth) fixture and deterministic round-trip tests. It adds optional per-clip `videoFadeIn` and `videoFadeOut` objects with integer millisecond durations. Unknown future fields are ignored where safe; a newer unsupported `schemaVersion` produces an actionable error before partial decoding. Because frogmouth is still pre-release, schema 2 directly replaces schema 1 without a migration and older projects are refused. Future migration policy will be established before a production release.
 
 ### Paths and missing sources
 
@@ -325,7 +329,7 @@ Processing looks up each artifact before running FFmpeg, so reopening a project,
 
 | Compatibility boundary | Release value | Behavior when it changes |
 | --- | ---: | --- |
-| `.frogmouth` JSON schema | `1` | Newer schemas are refused before partial decode; older schemas require an explicit sequential migration. |
+| `.frogmouth` JSON schema | `2` | Newer schemas are refused before partial decode; schema 1 is intentionally unsupported during pre-release development. |
 | Cache manifest schema | `1` | Unsupported manifests are disposable stale cache entries and are rebuilt on demand. |
 | Stabilization processing revision | `1` | Existing passes become stale and require **Update Stabilization**. |
 | Original-source thumbnail processing revision | `1` | Existing thumbnails miss the new identity and are regenerated lazily. |

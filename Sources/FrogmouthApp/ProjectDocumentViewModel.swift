@@ -584,6 +584,58 @@ final class ProjectDocumentViewModel: ObservableObject {
         }
     }
 
+    func enableSelectedVideoFade(at edge: VideoFadeEdge) {
+        guard canEditSelectedClip,
+              let project,
+              let selectedClipID,
+              let clip = project.clips.first(where: { $0.id == selectedClipID }),
+              let entry = try? TimelineIndex(project: project).entry(for: selectedClipID) else {
+            return
+        }
+        do {
+            let fade = try VideoFadePolicy.defaultFade(
+                at: edge,
+                for: clip,
+                timelineDuration: entry.timelineRange.duration
+            )
+            setSelectedVideoFade(fade, at: edge)
+        } catch {
+            report(error, phase: "video-fade")
+        }
+    }
+
+    func commitSelectedVideoFadeDuration(_ value: String, at edge: VideoFadeEdge) {
+        guard canEditSelectedClip, let selectedClipID else { return }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let duration = Int64(trimmed) else {
+            report(
+                TimelineEditError.invalidVideoFadeInput(
+                    clipID: selectedClipID,
+                    edge: edge,
+                    value: value
+                ),
+                phase: "video-fade"
+            )
+            return
+        }
+        setSelectedVideoFade(VideoFade(durationMilliseconds: duration), at: edge)
+    }
+
+    func removeSelectedVideoFade(at edge: VideoFadeEdge) {
+        setSelectedVideoFade(nil, at: edge)
+    }
+
+    private func setSelectedVideoFade(_ fade: VideoFade?, at edge: VideoFadeEdge) {
+        guard canEditSelectedClip, let session, let selectedClipID else { return }
+        Task {
+            await apply(
+                .setVideoFade(clipID: selectedClipID, edge: edge, fade: fade),
+                to: session,
+                selectingClip: selectedClipID
+            )
+        }
+    }
+
     func deleteSelectedClip() {
         guard canEditSelectedClip,
               let session,
@@ -1178,16 +1230,28 @@ final class ProjectDocumentViewModel: ObservableObject {
         } else {
             playheadFrame = 0
         }
+        let changesOnlyVideoFades = Self.changesOnlyVideoFades(
+            from: previousProject,
+            to: project
+        )
         if project != previousProject || resolvedMediaURLs != previousMediaURLs {
-            stabilizationValidations = [:]
-            playback.rebuild(
-                project: project,
-                mediaURLs: resolvedMediaURLs,
-                preservingFrame: playheadFrame
-            )
+            if changesOnlyVideoFades {
+                rebuildPlaybackWithValidatedStabilization()
+            } else {
+                stabilizationValidations = [:]
+                playback.rebuild(
+                    project: project,
+                    mediaURLs: resolvedMediaURLs,
+                    preservingFrame: playheadFrame
+                )
+            }
         }
         if project != previousProject {
-            scheduleStabilizationStatusRefresh()
+            if changesOnlyVideoFades {
+                scheduleTimelineExportReadinessRefresh()
+            } else {
+                scheduleStabilizationStatusRefresh()
+            }
         } else if resolvedMediaURLs != previousMediaURLs {
             scheduleTimelineExportReadinessRefresh()
         }
@@ -1340,6 +1404,22 @@ final class ProjectDocumentViewModel: ObservableObject {
         let invalid = CharacterSet(charactersIn: "/:")
         let components = name.components(separatedBy: invalid).filter { !$0.isEmpty }
         return components.joined(separator: "-").isEmpty ? "Untitled" : components.joined(separator: "-")
+    }
+
+    private static func changesOnlyVideoFades(
+        from previous: ProjectState?,
+        to current: ProjectState?
+    ) -> Bool {
+        guard var previous, var current, previous != current else { return false }
+        for index in previous.clips.indices {
+            previous.clips[index].videoFadeIn = nil
+            previous.clips[index].videoFadeOut = nil
+        }
+        for index in current.clips.indices {
+            current.clips[index].videoFadeIn = nil
+            current.clips[index].videoFadeOut = nil
+        }
+        return previous == current
     }
 
     private func scheduleTimelineExportReadinessRefresh() {

@@ -276,6 +276,89 @@ private let clipCID = UUID(uuidString: "CCCCCCCC-0000-0000-0000-000000000003")!
     #expect(editor.project.clips[0].stabilizationPasses == [first, second])
 }
 
+@Test func videoFadesAreValidatedUndoableAndFollowTrimSplitDuplicateRules() throws {
+    let rate = try FrameRate(numerator: 24, denominator: 1)
+    let asset = try makeAsset(id: assetAID, rate: rate, frameCount: 120)
+    let range = try makeRange(rate: rate, startFrame: 0, frameCount: 96)
+    let effect = StabilizationEffect(
+        mode: .steady,
+        analysisCoverage: range,
+        processingRevision: 1
+    )
+    let clip = TimelineClip(
+        id: clipAID,
+        assetID: asset.id,
+        sourceRange: range,
+        stabilizationPasses: [effect]
+    )
+    let project = ProjectState(
+        name: "Video fades",
+        mediaLibrary: [asset],
+        timelineFormat: makeFormat(from: asset),
+        clips: [clip]
+    )
+    var editor = ProjectEditor(project: project)
+    let fadeIn = VideoFade(durationMilliseconds: 500)
+    let fadeOut = VideoFade(durationMilliseconds: 750)
+
+    try editor.apply(.setVideoFade(clipID: clipAID, edge: .fadeIn, fade: fadeIn))
+    try editor.apply(.setVideoFade(clipID: clipAID, edge: .fadeOut, fade: fadeOut))
+    #expect(editor.project.clips[0].videoFadeIn == fadeIn)
+    #expect(editor.project.clips[0].videoFadeOut == fadeOut)
+    #expect(editor.project.clips[0].stabilizationPasses == [effect])
+    #expect(try editor.undo())
+    #expect(editor.project.clips[0].videoFadeOut == nil)
+    #expect(try editor.redo())
+
+    #expect(throws: TimelineEditError.invalidVideoFadeDuration(
+        clipID: clipAID,
+        edge: .fadeIn,
+        durationMilliseconds: 0
+    )) {
+        try editor.apply(.setVideoFade(
+            clipID: clipAID,
+            edge: .fadeIn,
+            fade: VideoFade(durationMilliseconds: 0)
+        ))
+    }
+
+    try editor.beginTrim(clipID: clipAID)
+    let oneSecond = try makeRange(rate: rate, startFrame: 0, frameCount: 24)
+    #expect(throws: TimelineEditError.videoFadesExceedClipDuration(
+        clipID: clipAID,
+        totalMilliseconds: 1_250,
+        maximumMilliseconds: 1_000
+    )) {
+        try editor.updateTrim(to: oneSecond)
+    }
+    try editor.cancelTrim()
+    #expect(editor.project.clips[0].sourceRange == range)
+
+    try editor.apply(.duplicateClip(clipID: clipAID, newClipID: clipCID))
+    #expect(editor.project.clips[1].videoFadeIn == fadeIn)
+    #expect(editor.project.clips[1].videoFadeOut == fadeOut)
+    #expect(try editor.undo())
+
+    try editor.apply(.splitClip(
+        clipID: clipAID,
+        atTimelineFrameOffset: 48,
+        rightClipID: clipBID
+    ))
+    let left = editor.project.clips[0]
+    let right = editor.project.clips[1]
+    #expect(left.videoFadeIn == fadeIn)
+    #expect(left.videoFadeOut == nil)
+    #expect(right.videoFadeIn == nil)
+    #expect(right.videoFadeOut == fadeOut)
+    #expect(left.stabilizationPasses == [effect])
+    #expect(right.stabilizationPasses == [effect])
+
+    try editor.apply(.setVideoFade(clipID: clipBID, edge: .fadeOut, fade: nil))
+    #expect(editor.project.clips[1].videoFadeOut == nil)
+    #expect(try editor.undo())
+    #expect(editor.project.clips[1].videoFadeOut == fadeOut)
+}
+
 @Test func duplicateReorderRippleDeleteAndDivergentHistoryAreReversible() throws {
     let rate = try FrameRate(numerator: 24, denominator: 1)
     let asset = try makeAsset(id: assetAID, rate: rate, frameCount: 96)

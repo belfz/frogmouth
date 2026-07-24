@@ -76,6 +76,8 @@ public struct ClipRenderPlan: Equatable, Sendable {
     public let hasSourceAudio: Bool
     public let audioFadeInDuration: TimeInterval
     public let audioFadeOutDuration: TimeInterval
+    public let videoFadeIn: VideoFade?
+    public let videoFadeOut: VideoFade?
     public let stabilizationPasses: [StabilizationRenderPass]
 
     public init(
@@ -91,6 +93,8 @@ public struct ClipRenderPlan: Equatable, Sendable {
         hasSourceAudio: Bool,
         audioFadeInDuration: TimeInterval,
         audioFadeOutDuration: TimeInterval,
+        videoFadeIn: VideoFade?,
+        videoFadeOut: VideoFade?,
         stabilizationPasses: [StabilizationRenderPass]
     ) {
         self.clipID = clipID
@@ -105,6 +109,8 @@ public struct ClipRenderPlan: Equatable, Sendable {
         self.hasSourceAudio = hasSourceAudio
         self.audioFadeInDuration = audioFadeInDuration
         self.audioFadeOutDuration = audioFadeOutDuration
+        self.videoFadeIn = videoFadeIn
+        self.videoFadeOut = videoFadeOut
         self.stabilizationPasses = stabilizationPasses
     }
 }
@@ -215,6 +221,8 @@ public struct TimelineRenderPlanner: Sendable {
                 hasSourceAudio: asset.inspected.audioCodec != nil,
                 audioFadeInDuration: 0,
                 audioFadeOutDuration: 0,
+                videoFadeIn: clip.videoFadeIn,
+                videoFadeOut: clip.videoFadeOut,
                 stabilizationPasses: stabilizationPasses
             ))
         }
@@ -366,6 +374,8 @@ public struct TimelineRenderPlanner: Sendable {
             hasSourceAudio: clip.hasSourceAudio,
             audioFadeInDuration: fadeIn,
             audioFadeOutDuration: fadeOut,
+            videoFadeIn: clip.videoFadeIn,
+            videoFadeOut: clip.videoFadeOut,
             stabilizationPasses: clip.stabilizationPasses
         )
     }

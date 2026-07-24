@@ -52,6 +52,16 @@ import Testing
         value: "1024"
     )))
 
+    var fadedClip = clip
+    fadedClip.videoFadeIn = VideoFade(durationMilliseconds: 500)
+    fadedClip.videoFadeOut = VideoFade(durationMilliseconds: 750)
+    #expect(builder.identities(
+        for: 1,
+        in: fadedClip,
+        asset: fixture.asset,
+        toolRevision: fixture.toolRevision
+    ) == identities)
+
     let inwardRange = try makeRange(rate: fixture.rate, startFrame: 24, frameCount: 96)
     let descendant = TimelineClip(
         assetID: fixture.asset.id,

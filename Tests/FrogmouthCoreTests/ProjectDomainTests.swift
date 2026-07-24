@@ -4,20 +4,22 @@ import Testing
 @testable import FrogmouthCore
 
 private let projectFixtureURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    .appendingPathComponent("Tests/Fixtures/ProjectSchemaV1.frogmouth")
+    .appendingPathComponent("Tests/Fixtures/ProjectSchemaV2.frogmouth")
 
 @Test func projectSchemaFixtureRoundTripsDeterministically() throws {
     let data = try Data(contentsOf: projectFixtureURL)
     let codec = ProjectJSONCodec()
     let project = try codec.decode(data)
 
-    #expect(project.schemaVersion == 1)
+    #expect(project.schemaVersion == 2)
     #expect(project.id == UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
     #expect(project.name == "Wildlife Morning")
     #expect(project.mediaLibrary.count == 1)
     #expect(project.clips.count == 1)
     #expect(project.clips[0].assetID == project.mediaLibrary[0].id)
     #expect(project.clips[0].stabilizationPasses[0].mode == .naturalMotion)
+    #expect(project.clips[0].videoFadeIn?.durationMilliseconds == 1_000)
+    #expect(project.clips[0].videoFadeOut?.durationMilliseconds == 750)
     let expectedFrameRate = try FrameRate(numerator: 60_000, denominator: 1_001)
     #expect(project.timelineFormat?.frameRate == expectedFrameRate)
 
@@ -45,17 +47,47 @@ private let projectFixtureURL = URL(fileURLWithPath: FileManager.default.current
     #expect(try codec.decode(expanded) == expected)
 }
 
+@Test func projectSchemaRejectsInvalidAndOverlappingVideoFades() throws {
+    let data = try Data(contentsOf: projectFixtureURL)
+    var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    var clips = try #require(object["clips"] as? [[String: Any]])
+    let clipID = UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")!
+
+    clips[0]["videoFadeIn"] = ["durationMilliseconds": 0]
+    object["clips"] = clips
+    let invalidDuration = try JSONSerialization.data(withJSONObject: object)
+    #expect(throws: TimelineEditError.invalidVideoFadeDuration(
+        clipID: clipID,
+        edge: .fadeIn,
+        durationMilliseconds: 0
+    )) {
+        _ = try ProjectJSONCodec().decode(invalidDuration)
+    }
+
+    clips[0]["videoFadeIn"] = ["durationMilliseconds": 9_000]
+    clips[0]["videoFadeOut"] = ["durationMilliseconds": 1_000]
+    object["clips"] = clips
+    let overlapping = try JSONSerialization.data(withJSONObject: object)
+    #expect(throws: TimelineEditError.videoFadesExceedClipDuration(
+        clipID: clipID,
+        totalMilliseconds: 10_000,
+        maximumMilliseconds: 9_993
+    )) {
+        _ = try ProjectJSONCodec().decode(overlapping)
+    }
+}
+
 @Test func projectSchemaRejectsFutureMissingAndInvalidVersions() throws {
     let data = try Data(contentsOf: projectFixtureURL)
     var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-    object["schemaVersion"] = 2
+    object["schemaVersion"] = 3
     let future = try JSONSerialization.data(withJSONObject: object)
-    #expect(throws: ProjectSchemaError.unsupportedVersion(found: 2, supported: 1)) {
+    #expect(throws: ProjectSchemaError.unsupportedVersion(found: 3, supported: 2)) {
         _ = try ProjectJSONCodec().decode(future)
     }
     #expect(ProjectSchemaError.unsupportedVersion(
-        found: 2,
-        supported: 1
+        found: 3,
+        supported: 2
     ).errorDescription?.contains("Update frogmouth") == true)
 
     object.removeValue(forKey: "schemaVersion")
@@ -71,7 +103,7 @@ private let projectFixtureURL = URL(fileURLWithPath: FileManager.default.current
     }
 }
 
-@Test func projectMigrationPipelineIsEstablishedWithoutAVersionZeroMigration() throws {
+@Test func projectMigrationPipelineAcceptsOnlyExplicitMigrationsToSchemaTwo() throws {
     let versionZero = Data(#"{"schemaVersion":0}"#.utf8)
     #expect(throws: ProjectSchemaError.noMigration(fromVersion: 0)) {
         _ = try ProjectJSONCodec().decode(versionZero)
@@ -80,8 +112,17 @@ private let projectFixtureURL = URL(fileURLWithPath: FileManager.default.current
     let fixture = try Data(contentsOf: projectFixtureURL)
     let migration = FixtureMigration(replacement: fixture)
     let migrated = try ProjectJSONCodec(migrations: [migration]).decode(versionZero)
-    #expect(migrated.schemaVersion == 1)
+    #expect(migrated.schemaVersion == 2)
     #expect(migrated.name == "Wildlife Morning")
+
+    var versionOne = try #require(
+        JSONSerialization.jsonObject(with: fixture) as? [String: Any]
+    )
+    versionOne["schemaVersion"] = 1
+    let unsupportedOldProject = try JSONSerialization.data(withJSONObject: versionOne)
+    #expect(throws: ProjectSchemaError.noMigration(fromVersion: 1)) {
+        _ = try ProjectJSONCodec().decode(unsupportedOldProject)
+    }
 }
 
 @Test func projectJSONContainsDecisionsButNoTransientOrCacheState() throws {
@@ -117,7 +158,7 @@ private let projectFixtureURL = URL(fileURLWithPath: FileManager.default.current
 
 private struct FixtureMigration: ProjectMigration {
     let sourceVersion = 0
-    let destinationVersion = 1
+    let destinationVersion = 2
     let replacement: Data
 
     func migrate(_ projectData: Data) throws -> Data {

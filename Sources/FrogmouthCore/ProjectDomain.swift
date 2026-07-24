@@ -120,22 +120,56 @@ public struct StabilizationEffect: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+public enum VideoFadeEdge: String, Codable, Equatable, Hashable, Sendable {
+    case fadeIn
+    case fadeOut
+}
+
+public struct VideoFade: Codable, Equatable, Hashable, Sendable {
+    public static let defaultDurationMilliseconds: Int64 = 1_000
+
+    public var durationMilliseconds: Int64
+
+    public init(durationMilliseconds: Int64) {
+        self.durationMilliseconds = durationMilliseconds
+    }
+
+    public var duration: MediaTime {
+        get throws {
+            try MediaTime(value: durationMilliseconds, timescale: 1_000)
+        }
+    }
+}
+
 public struct TimelineClip: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public var assetID: MediaAsset.ID
     public var sourceRange: MediaTimeRange
     public var stabilizationPasses: [StabilizationEffect]
+    public var videoFadeIn: VideoFade?
+    public var videoFadeOut: VideoFade?
 
     public init(
         id: UUID = UUID(),
         assetID: MediaAsset.ID,
         sourceRange: MediaTimeRange,
-        stabilizationPasses: [StabilizationEffect] = []
+        stabilizationPasses: [StabilizationEffect] = [],
+        videoFadeIn: VideoFade? = nil,
+        videoFadeOut: VideoFade? = nil
     ) {
         self.id = id
         self.assetID = assetID
         self.sourceRange = sourceRange
         self.stabilizationPasses = stabilizationPasses
+        self.videoFadeIn = videoFadeIn
+        self.videoFadeOut = videoFadeOut
+    }
+
+    public func videoFade(at edge: VideoFadeEdge) -> VideoFade? {
+        switch edge {
+        case .fadeIn: videoFadeIn
+        case .fadeOut: videoFadeOut
+        }
     }
 }
 
@@ -165,7 +199,7 @@ public enum ProjectSchemaError: LocalizedError, Equatable, Sendable {
 }
 
 public struct ProjectState: Codable, Equatable, Identifiable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public private(set) var schemaVersion: Int
     public var id: UUID
@@ -293,6 +327,7 @@ public struct ProjectJSONCodec: Sendable {
     }
 
     public func encode(_ project: ProjectState) throws -> Data {
+        _ = try TimelineIndex(project: project)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(project)
@@ -300,6 +335,8 @@ public struct ProjectJSONCodec: Sendable {
 
     public func decode(_ data: Data) throws -> ProjectState {
         let migrated = try migrationPipeline.migrateToCurrentSchema(data)
-        return try JSONDecoder().decode(ProjectState.self, from: migrated)
+        let project = try JSONDecoder().decode(ProjectState.self, from: migrated)
+        _ = try TimelineIndex(project: project)
+        return project
     }
 }

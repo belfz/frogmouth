@@ -539,6 +539,22 @@ private struct TimelinePresentationClip: View {
         .contentShape(RoundedRectangle(cornerRadius: 5))
         .onTapGesture { document.selectClip(clip.id) }
         .draggable("clip:\(clip.id.uuidString)")
+        .overlay(alignment: .bottomLeading) {
+            if clip.videoFadeIn != nil {
+                fadeBadge(
+                    symbol: "circle.lefthalf.filled",
+                    label: "Fade in from black"
+                )
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if clip.videoFadeOut != nil {
+                fadeBadge(
+                    symbol: "circle.righthalf.filled",
+                    label: "Fade out to black"
+                )
+            }
+        }
         .overlay(alignment: .leading) {
             if isSelected {
                 trimHandle(edge: .leading)
@@ -549,6 +565,17 @@ private struct TimelinePresentationClip: View {
                 trimHandle(edge: .trailing)
             }
         }
+    }
+
+    private func fadeBadge(symbol: String, label: String) -> some View {
+        Image(systemName: symbol)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(4)
+            .background(.black.opacity(0.68), in: Circle())
+            .padding(6)
+            .help(label)
+            .accessibilityLabel(label)
     }
 
     @ViewBuilder
@@ -584,7 +611,12 @@ private struct TimelinePresentationClip: View {
         case .valid: "stabilization current"
         case .stale: "stabilization needs update"
         }
-        return "\(duration), \(stabilization), \(isSelected ? "selected" : "not selected")"
+        let fades = [
+            clip.videoFadeIn.map { "fade in \($0.durationMilliseconds) milliseconds" },
+            clip.videoFadeOut.map { "fade out \($0.durationMilliseconds) milliseconds" },
+        ].compactMap { $0 }
+        let fadeDescription = fades.isEmpty ? "no video fades" : fades.joined(separator: ", ")
+        return "\(duration), \(stabilization), \(fadeDescription), \(isSelected ? "selected" : "not selected")"
     }
 
     private var thumbnailRequest: ThumbnailRequest? {
