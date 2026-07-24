@@ -48,6 +48,19 @@ import Testing
     #expect(matchingLines[0].contains(#"path="/Volumes/Wild life/bird\nclip.mp4""#))
 }
 
+@Test func diagnosticsRecordApplicationVersionAndBuild() throws {
+    let root = try diagnosticsTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let diagnostics = DiagnosticLogStore(
+        baseDirectory: root,
+        buildInfo: ApplicationBuildInfo(version: "1.0.0", build: "27")
+    )
+
+    let contents = diagnostics.contents()
+    #expect(contents.contains("frogmouth_version=1.0.0"))
+    #expect(contents.contains("frogmouth_build=27"))
+}
+
 @Test func asynchronousDiagnosticReadFlushesQueuedWrites() async throws {
     let root = try diagnosticsTemporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }

@@ -32,6 +32,18 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Verify release metadata tooling
+        run: |
+          release_tag="v$(tr -d '[:space:]' < VERSION)"
+          ./scripts/validate-version.sh "$release_tag"
+          if ./scripts/validate-version.sh v999.999.999; then
+            echo "Mismatched release tag was unexpectedly accepted." >&2
+            exit 1
+          fi
+          ./scripts/render-release-notes.sh "$release_tag" > "$RUNNER_TEMP/release-notes.md"
+          grep -F "intentionally unsigned" "$RUNNER_TEMP/release-notes.md"
+          grep -F "Project schema 2" "$RUNNER_TEMP/release-notes.md"
+
       - name: Install FFmpeg integration dependency
         run: |
           brew install ffmpeg-full
@@ -56,9 +68,9 @@ jobs:
         run: swift test
 
       - name: Build app bundle
-        run: ./scripts/build-app.sh
+        run: FROGMOUTH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" ./scripts/build-app.sh
 
-      - name: Verify app bundle
+      - name: Verify and package app bundle
         run: |
-          test -x build/frogmouth.app/Contents/MacOS/frogmouth
-          plutil -lint build/frogmouth.app/Contents/Info.plist
+          ./scripts/verify-app-bundle.sh
+          ./scripts/package-release.sh
