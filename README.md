@@ -16,6 +16,10 @@ The project was initially designed and developed with Canon EOS R5 footage in mi
 
 The active single-track editor is specified in [TIMELINE_DESIGN.md](TIMELINE_DESIGN.md). Stabilization latency, benchmarks, alternatives, and optimization decisions are tracked in [STABILIZATION_PERFORMANCE.md](STABILIZATION_PERFORMANCE.md).
 
+Developers can explore the architecture, runtime flows, Swift conventions,
+testing strategy, and configuration through the dependency-free
+[interactive codebase field guide](docs/codebase-field-guide/).
+
 The first timeline release will preserve the colour characteristics established by its first clip. Clips with conflicting primaries, transfer function (including HDR or Log), matrix, or full/limited range will be rejected with the differing properties listed; frogmouth will not silently convert them. Proper colour conversion is deferred to a later iteration.
 
 Stabilization is intentionally blocking in the first timeline release: analysis and preview rendering show a cancellable progress view, but editing cannot continue until the operation finishes or is cancelled. Background per-clip stabilization is planned for a later iteration. The 25-source/50-clip performance methodology and current measurements are recorded in [Tests/Performance/EDITOR_BENCHMARK.md](Tests/Performance/EDITOR_BENCHMARK.md).

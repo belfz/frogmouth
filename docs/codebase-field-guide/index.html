@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An interactive developer tour of the Frogmouth 1.0 macOS video editor codebase.">
+  <title>Frogmouth Codebase Field Guide</title>
+  <link rel="icon" href="../../Sources/FrogmouthApp/Resources/FrogmouthMark.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#chapter-stage">Skip to chapter</a>
+
+  <div class="app-shell">
+    <aside class="rail" aria-label="Field guide chapters">
+      <div class="brand">
+        <img src="../../Sources/FrogmouthApp/Resources/FrogmouthMark.png" alt="" width="46" height="46">
+        <div>
+          <strong>frogmouth</strong>
+          <span>codebase field guide</span>
+        </div>
+      </div>
+
+      <div class="rail-meta">
+        <span>v1.0.0</span>
+        <span>Swift 6.2</span>
+        <span>macOS 15+</span>
+      </div>
+
+      <nav class="chapter-nav" id="chapter-nav">
+        <button class="chapter-link is-active" data-target="orientation">
+          <span class="chapter-number">01</span>
+          <span><strong>Orientation</strong><small>The 90-second model</small></span>
+        </button>
+        <button class="chapter-link" data-target="structure">
+          <span class="chapter-number">02</span>
+          <span><strong>Project structure</strong><small>Modules and boundaries</small></span>
+        </button>
+        <button class="chapter-link" data-target="runtime">
+          <span class="chapter-number">03</span>
+          <span><strong>Runtime journeys</strong><small>Trace real features</small></span>
+        </button>
+        <button class="chapter-link" data-target="domain">
+          <span class="chapter-number">04</span>
+          <span><strong>Domain &amp; editing</strong><small>State, commands, time</small></span>
+        </button>
+        <button class="chapter-link" data-target="media">
+          <span class="chapter-number">05</span>
+          <span><strong>Media engine</strong><small>Preview, FFmpeg, cache</small></span>
+        </button>
+        <button class="chapter-link" data-target="ui">
+          <span class="chapter-number">06</span>
+          <span><strong>UI architecture</strong><small>SwiftUI meets AppKit</small></span>
+        </button>
+        <button class="chapter-link" data-target="swift">
+          <span class="chapter-number">07</span>
+          <span><strong>Swift style</strong><small>Patterns and concurrency</small></span>
+        </button>
+        <button class="chapter-link" data-target="tests">
+          <span class="chapter-number">08</span>
+          <span><strong>Testing</strong><small>110 tests, six layers</small></span>
+        </button>
+        <button class="chapter-link" data-target="config">
+          <span class="chapter-number">09</span>
+          <span><strong>Configuration</strong><small>Build, CI, release</small></span>
+        </button>
+        <button class="chapter-link" data-target="contribute">
+          <span class="chapter-number">10</span>
+          <span><strong>Change safely</strong><small>Human + AI playbook</small></span>
+        </button>
+      </nav>
+
+      <div class="rail-footer">
+        <div class="progress-copy"><span id="progress-label">Chapter 1 of 10</span><span id="progress-percent">10%</span></div>
+        <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
+        <button class="quiet-button" id="keyboard-help-button" aria-haspopup="dialog">Keyboard guide <kbd>?</kbd></button>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Developer orientation</span>
+          <span class="topbar-title" id="topbar-title">Orientation</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-button" id="search-button" aria-haspopup="dialog" title="Search the guide">
+            <span aria-hidden="true">⌕</span><span>Search</span><kbd>/</kbd>
+          </button>
+          <button class="icon-button" id="theme-button" title="Toggle colour theme" aria-label="Toggle colour theme">
+            <span id="theme-icon" aria-hidden="true">☼</span>
+          </button>
+        </div>
+      </header>
+
+      <main id="chapter-stage" tabindex="-1">
+        <section class="chapter is-active" id="orientation" data-title="Orientation">
+          <div class="chapter-heading hero-heading">
+            <div>
+              <span class="kicker">Start here · 5 minutes</span>
+              <h1>Learn Frogmouth as a system,<br><em>not a pile of Swift.</em></h1>
+              <p class="lede">Frogmouth is a native macOS editor whose saved project is a list of decisions. Swift owns the experience and the editing model; AVFoundation previews those decisions; FFmpeg turns them into durable media.</p>
+              <div class="hero-actions">
+                <button class="primary-button" data-jump="structure">Begin the guided tour <span>→</span></button>
+                <button class="secondary-button" data-jump="runtime">Trace a feature</button>
+              </div>
+            </div>
+            <div class="hero-mark" aria-hidden="true">
+              <img src="../../Sources/FrogmouthApp/Resources/FrogmouthMark.png" alt="">
+              <span class="orbit orbit-one">SwiftUI</span>
+              <span class="orbit orbit-two">AVFoundation</span>
+              <span class="orbit orbit-three">FFmpeg</span>
+            </div>
+          </div>
+
+          <div class="stat-grid" aria-label="Codebase statistics">
+            <article><strong>3</strong><span>SwiftPM targets</span><small>Core · App · Benchmark</small></article>
+            <article><strong>0</strong><span>third-party Swift packages</span><small>Apple frameworks + FFmpeg process</small></article>
+            <article><strong>110</strong><span>Swift Testing cases</span><small>unit through real-media integration</small></article>
+            <article><strong>2</strong><span>rendering engines</span><small>AVFoundation preview · FFmpeg output</small></article>
+          </div>
+
+          <div class="mental-model">
+            <article class="model-card rust">
+              <span class="model-index">01</span>
+              <h2>The project is decisions</h2>
+              <p><code>.frogmouth</code> JSON stores sources, ordered clips, trim ranges, stabilization effects, fades, and timeline format. It never embeds or mutates source media.</p>
+            </article>
+            <article class="model-card blue">
+              <span class="model-index">02</span>
+              <h2>Edits are commands</h2>
+              <p>Every durable timeline mutation passes through <code>ProjectCommand</code> and <code>ProjectEditor</code>, so validation, undo/redo, and autosave agree.</p>
+            </article>
+            <article class="model-card green">
+              <span class="model-index">03</span>
+              <h2>Heavy work is replaceable</h2>
+              <p>Protocols isolate inspection, file writing, thumbnail generation, and FFmpeg execution. Actors serialize disk state; fakes make the difficult paths testable.</p>
+            </article>
+          </div>
+
+          <aside class="callout">
+            <strong>The useful architectural label</strong>
+            <p>“MVVM-ish” is true but incomplete. A better description is <strong>command-driven domain core + actor-isolated services + a main-actor application coordinator + declarative SwiftUI views</strong>.</p>
+          </aside>
+        </section>
+
+        <section class="chapter" id="structure" data-title="Project structure">
+          <div class="chapter-heading">
+            <span class="kicker">Chapter 02 · Shape of the repository</span>
+            <h1>Three targets.<br><em>One-way dependencies.</em></h1>
+            <p class="lede">Swift Package Manager is the project definition—there is no checked-in Xcode project. The executable UI depends on the reusable core; the benchmark also depends on the core; tests target the core directly.</p>
+          </div>
+
+          <div class="architecture-layout">
+            <div class="architecture-map" aria-label="Clickable architecture map">
+              <div class="map-lane">
+                <span class="lane-label">Presentation</span>
+                <button class="system-node app-node is-selected" data-node="app">
+                  <span class="node-icon">⌘</span>
+                  <strong>FrogmouthApp</strong>
+                  <small>SwiftUI, AppKit bridges, orchestration</small>
+                </button>
+              </div>
+              <div class="map-arrow" aria-hidden="true">depends on ↓</div>
+              <div class="map-lane">
+                <span class="lane-label">Domain + services</span>
+                <button class="system-node core-node" data-node="core">
+                  <span class="node-icon">◆</span>
+                  <strong>FrogmouthCore</strong>
+                  <small>editing, time, persistence, rendering</small>
+                </button>
+              </div>
+              <div class="map-arrow split-arrow" aria-hidden="true"><span>calls ↓</span><span>uses ↓</span></div>
+              <div class="map-lane two-up">
+                <button class="system-node process-node" data-node="ffmpeg">
+                  <span class="node-icon">▶</span>
+                  <strong>FFmpeg</strong>
+                  <small>external validated process</small>
+                </button>
+                <button class="system-node framework-node" data-node="apple">
+                  <span class="node-icon">◎</span>
+                  <strong>Apple frameworks</strong>
+                  <small>preview, UI, files, exact time</small>
+                </button>
+              </div>
+              <div class="map-lane benchmark-lane">
+                <button class="system-node benchmark-node" data-node="benchmark">
+                  <span class="node-icon">∆</span>
+                  <strong>FrogmouthBenchmark</strong>
+                  <small>50-clip performance guardrails</small>
+                </button>
+              </div>
+            </div>
+            <aside class="detail-panel" id="architecture-detail" aria-live="polite"></aside>
+          </div>
+
+          <div class="section-heading">
+            <div><span class="kicker">Repository map</span><h2>What lives where</h2></div>
+            <span class="hint">Click a path to copy it</span>
+          </div>
+          <div class="tree-grid">
+            <div class="file-tree" role="tree" aria-label="Repository structure">
+              <button data-copy="Package.swift"><span>◈</span><strong>Package.swift</strong><small>targets, platform, resources</small></button>
+              <div class="tree-branch">
+                <span class="folder">Sources/</span>
+                <button data-copy="Sources/FrogmouthApp"><span>⌘</span><strong>FrogmouthApp/</strong><small>UI + application state</small></button>
+                <button data-copy="Sources/FrogmouthCore"><span>◆</span><strong>FrogmouthCore/</strong><small>domain + services</small></button>
+                <button data-copy="Sources/FrogmouthBenchmark"><span>∆</span><strong>FrogmouthBenchmark/</strong><small>repeatable performance harness</small></button>
+              </div>
+              <div class="tree-branch">
+                <span class="folder">Tests/</span>
+                <button data-copy="Tests/FrogmouthCoreTests"><span>✓</span><strong>FrogmouthCoreTests/</strong><small>110 Swift Testing cases</small></button>
+                <button data-copy="Tests/Fixtures"><span>▧</span><strong>Fixtures/</strong><small>schema contract + generated media</small></button>
+                <button data-copy="Tests/Performance"><span>⌁</span><strong>Performance/</strong><small>recorded guardrails</small></button>
+              </div>
+              <button data-copy="scripts"><span>›_</span><strong>scripts/</strong><small>build, fixtures, package, release</small></button>
+              <button data-copy=".github/workflows"><span>↻</span><strong>.github/workflows/</strong><small>CI + tagged releases</small></button>
+              <button data-copy="TIMELINE_DESIGN.md"><span>¶</span><strong>TIMELINE_DESIGN.md</strong><small>architectural contract</small></button>
+            </div>
+            <div class="boundary-notes">
+              <article>
+                <span class="status-dot good"></span>
+                <div><strong>Dependency direction is healthy</strong><p><code>FrogmouthCore</code> never imports <code>FrogmouthApp</code>. UI concerns cannot leak back through the package graph.</p></div>
+              </article>
+              <article>
+                <span class="status-dot neutral"></span>
+                <div><strong>Core means “UI-free,” not “platform-free”</strong><p>The core intentionally uses AVFoundation, AppKit thumbnail types, CoreMedia, CryptoKit, Foundation, and Darwin. This is a macOS product.</p></div>
+              </article>
+              <article>
+                <span class="status-dot watch"></span>
+                <div><strong>Three concentration points</strong><p><code>ProjectDocumentViewModel</code> (1,504 lines), <code>ProjectEditorShell</code> (923), and <code>SequenceTimelineView</code> (856) deserve care when features expand.</p></div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="chapter" id="runtime" data-title="Runtime journeys">
+          <div class="chapter-heading">
+            <span class="kicker">Chapter 03 · Follow the work</span>
+            <h1>Trace a feature<br><em>end to end.</em></h1>
+            <p class="lede">Select a journey. Each step names the abstraction responsible, the state boundary crossed, and the source file where the behavior lives.</p>
+          </div>
+
+          <div class="flow-picker" role="tablist" aria-label="Runtime journey">
+            <button role="tab" aria-selected="true" data-flow="startup">Start app</button>
+            <button role="tab" aria-selected="false" data-flow="import">Import</button>
+            <button role="tab" aria-selected="false" data-flow="edit">Edit timeline</button>
+            <button role="tab" aria-selected="false" data-flow="preview">Preview</button>
+            <button role="tab" aria-selected="false" data-flow="stabilize">Stabilize</button>
+            <button role="tab" aria-selected="false" data-flow="export">Export</button>
+            <button role="tab" aria-selected="false" data-flow="autosave">Autosave</button>
+          </div>
+          <div class="flow-summary" id="flow-summary"></div>
+          <div class="flow-stage" id="flow-stage" aria-live="polite"></div>
+
+          <div class="operation-lab">
+            <div class="operation-lab-heading">
+              <div>
+                <span class="kicker">Operation microscope</span>
+                <h2>What happens under the hood?</h2>
+                <p>Follow one user action across memory, project state, preview, and the filesystem.</p>
+              </div>
+              <div class="operation-picker" role="tablist" aria-label="Editing operation">
+                <button role="tab" aria-selected="true" data-operation="split">Split</button>
+                <button role="tab" aria-selected="false" data-operation="trim">Trim</button>
+                <button role="tab" aria-selected="false" data-operation="fade">Fade</button>
+                <button role="tab" aria-selected="false" data-operation="stabilize">Stabilize</button>
+                <button role="tab" aria-selected="false" data-operation="export">Export</button>
+              </div>
+            </div>
+            <div id="operation-stage" class="operation-stage" aria-live="polite"></div>
+          </div>
+
+          <aside class="callout split-callout">
+            <div><strong>Interactive path</strong><p>AVFoundation builds an in-memory composition quickly enough for seeking and playback.</p></div>
+            <div><strong>Durable path</strong><p>FFmpeg receives an explicit filter graph and writes stabilization previews or the final HEVC/AAC file.</p></div>
+          </aside>
+        </section>
+
+        <section class="chapter" id="domain" data-title="Domain &amp; editing">
+          <div class="chapter-heading">
+            <span class="kicker">Chapter 04 · The source of truth</span>
+            <h1>A small model with<br><em>strong invariants.</em></h1>
+            <p class="lede">The durable state is deliberately boring: Codable value types with stable IDs and rational time. Complexity lives in validation and transformations, not hidden object graphs.</p>
+          </div>
+
+          <div class="domain-stack">
+            <article class="domain-layer">
+              <span class="domain-kind">Root</span>
+              <div><h2>ProjectState</h2><p><code>schemaVersion</code>, ID, name, media library, optional timeline format, ordered clips.</p></div>
+              <button data-copy="Sources/FrogmouthCore/ProjectDomain.swift">ProjectDomain.swift</button>
+            </article>
+            <article class="domain-layer">
+              <span class="domain-kind">Source</span>
+              <div><h2>MediaAsset</h2><p>Path reference + fingerprint + inspected facts. One source can back many timeline clips.</p></div>
+              <button data-copy="Sources/FrogmouthCore/ProjectMedia.swift">ProjectMedia.swift</button>
+            </article>
+            <article class="domain-layer">
+              <span class="domain-kind">Decision</span>
+              <div><h2>TimelineClip</h2><p>Asset ID, source range, ordered stabilization passes, optional picture-only fades.</p></div>
+              <button data-copy="Sources/FrogmouthCore/TimelineEditing.swift">TimelineEditing.swift</button>
+            </article>
+            <article class="domain-layer">
+              <span class="domain-kind">Precision</span>
+              <div><h2>MediaTime · MediaTimeRange · FrameRate</h2><p>Exact rationals and checked arithmetic. Frames are mapped; seconds are for display and FFmpeg boundaries.</p></div>
+              <button data-copy="Sources/FrogmouthCore/ExactTime.swift">ExactTime.swift</button>
+            </article>
+          </div>
+
+          <div class="two-column">
+            <article class="panel">
+              <span class="kicker">The command gate</span>
+              <h2>One path for durable edits</h2>
+              <pre><code>View gesture
+  → ProjectCommand
+  → ProjectEditor.apply(_:)
+  → validate complete ProjectState
+  → ProjectHistory records snapshot
+  → ProjectDocumentSession schedules autosave
+  → ViewModel publishes one coherent snapshot</code></pre>
+              <p>Imports, insertion, split, trim, duplicate, move, delete, stabilization, and fades all use this path. Undo/redo restores validated project snapshots rather than attempting inverse media operations.</p>
+            </article>
+            <article class="panel">
+              <span class="kicker">The exception that proves it</span>
+              <h2>Trim is a transaction</h2>
+              <p>Pointer movement needs live feedback without adding hundreds of undo entries. A <code>TrimTransaction</code> keeps a pending range; commit emits one durable command; cancel restores the original.</p>
+              <div class="mini-timeline" aria-label="Trim transaction illustration">
+                <span class="trimmed">discard</span><span class="kept">pending visible range</span><span class="trimmed">discard</span>
+              </div>
+              <p class="fine-print">This is intentional UI-transient state. It never belongs in project JSON.</p>
+            </article>
+          </div>
+
+          <div class="state-table" role="table" aria-label="State classification">
+            <div class="state-row header" role="row"><span>State class</span><span>Examples</span><span>Lifetime / owner</span></div>
+            <div class="state-row" role="row"><strong>Persisted decisions</strong><span>clips, ranges, fades, effect descriptors</span><span><code>ProjectState</code> → schema 2 JSON</span></div>
+            <div class="state-row" role="row"><strong>Session state</strong><span>selection, playhead, trim preview, busy flags</span><span><code>ProjectDocumentViewModel</code></span></div>
+            <div class="state-row" role="row"><strong>Generated artifacts</strong><span>thumbnails, transforms, stabilized proxies</span><span><code>ProjectCacheStore</code>; disposable</span></div>
+            <div class="state-row" role="row"><strong>External truth</strong><span>source bytes, FFmpeg version, file metadata</span><span>filesystem + validated installation</span></div>
+          </div>
+        </section>
+
+        <section class="chapter" id="media" data-title="Media engine">
+          <div class="chapter-heading">
+            <span class="kicker">Chapter 05 · Two engines, explicit contracts</span>
+            <h1>Preview is not export.<br><em>They share a model.</em></h1>
+            <p class="lede">Frogmouth does not try to make AVFoundation and FFmpeg behave identically by accident. It builds explicit plans from the same project invariants and validates the final output.</p>
+          </div>
+
+          <div class="engine-compare">
+            <article>
+              <div class="engine-title"><span>◎</span><div><strong>AVFoundation</strong><small>interactive engine</small></div></div>
+              <ul>
+                <li><code>AVMutableComposition</code> joins video/audio segments.</li>
+                <li><code>AVMutableVideoComposition</code> applies aspect fit and fades.</li>
+                <li><code>AVPlayer</code> handles seek and playback.</li>
+                <li><code>AVAssetImageGenerator</code> creates thumbnails.</li>
+              </ul>
+              <a href="../../Sources/FrogmouthCore/PlaybackComposition.swift">PlaybackComposition.swift →</a>
+            </article>
+            <article>
+              <div class="engine-title"><span>▶</span><div><strong>FFmpeg</strong><small>processing engine</small></div></div>
+              <ul>
+                <li><code>vidstabdetect</code> analyzes motion into transform files.</li>
+                <li><code>vidstabtransform</code> renders stabilized proxies.</li>
+                <li>Filter graphs conform, trim, fade, concatenate, and encode.</li>
+                <li>VideoToolbox produces HEVC; AAC remains linked.</li>
+              </ul>
+              <a href="../../Sources/FrogmouthCore/TimelineFFmpegCommandFactory.swift">TimelineFFmpegCommandFactory.swift →</a>
+            </article>
+          </div>
+
+          <div class="pipeline">
+            <article><span>1</span><div><strong>Readiness</strong><p>Every used source exists; stabilization is valid; destination is sensible.</p></div></article>
+            <article><span>2</span><div><strong>Render plan</strong><p>Resolve inputs, exact clip ranges, conformance, effects, frames, bitrate.</p></div></article>
+            <article><span>3</span><div><strong>Arguments</strong><p>Produce an explicit FFmpeg argv and filter graph—no shell interpolation.</p></div></article>
+            <article><span>4</span><div><strong>Execution</strong><p><code>Process</code> runs asynchronously; stderr yields progress; cancellation terminates it.</p></div></article>
+            <article><span>5</span><div><strong>Validation</strong><p>Reinspect dimensions, duration, rate, codecs, colour, audio, and provenance.</p></div></article>
+            <article><span>6</span><div><strong>Atomic publish</strong><p>Move the validated partial file into place and normalize Finder visibility.</p></div></article>
+          </div>
+
+          <div class="two-column">
+            <article class="panel">
+              <span class="kicker">Cache identity</span>
+              <h2>Generated, validated, disposable</h2>
+              <p>SHA-256 keys include source fingerprint, processing revision, FFmpeg tool revision, and ordered parameters. A manifest records the artifact filename and byte count. Any mismatch becomes a typed stale reason.</p>
+              <pre><code>identity → sorted JSON → SHA-256 key
+         ↘ artifact + manifest.json
+change source / tool / algorithm / params
+         → stale → regenerate</code></pre>
+            </article>
+            <article class="panel warning-panel">
+              <span class="kicker">Important invariant</span>
+              <h2>Never trust an output because FFmpeg exited 0</h2>
+              <p><code>TimelineExporter</code> writes to a unique partial file, reinspects it, validates the media facts and provenance, checks cancellation again, then finalizes atomically.</p>
+              <p class="fine-print">This is why failures should retain actionable diagnostics but not leave a plausible-looking final file.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="chapter" id="ui" data-title="UI architecture">
+          <div class="chapter-heading">
+            <span class="kicker">Chapter 06 · Native macOS composition</span>
+            <h1>SwiftUI describes.<br><em>AppKit fills the gaps.</em></h1>
+            <p class="lede">The UI is declarative at the edges, but the product needs native panels, window interception, AVPlayer hosting, keyboard monitoring, and precise scrolling. Small representables bridge those platform surfaces.</p>
+          </div>
+
+          <div class="ui-shell-demo">
+            <div class="demo-toolbar">toolbar + commands</div>
+            <div class="demo-library">Media Library<small>sources + thumbnails</small></div>
+            <div class="demo-viewer">AVPlayer preview<small>PlaybackCoordinator</small></div>
+            <div class="demo-inspector">Inspector<small>selected clip decisions</small></div>
+            <div class="demo-timeline">SequenceTimelineView<small>layout, trim, playhead, drag/drop</small></div>
+          </div>
+
+          <div class="file-responsibilities">
+            <article>
+              <span class="file-size">75 lines</span>
+              <h2>FrogmouthApp.swift</h2>
+              <p>Composition root, shared objects, macOS command menus, keyboard shortcuts.</p>
+            </article>
+            <article>
+              <span class="file-size">294 lines</span>
+              <h2>RootView.swift</h2>
+              <p>FFmpeg gate, startup/editor switch, busy overlays, drop entry point, close guard.</p>
+            </article>
+            <article class="hotspot">
+              <span class="file-size">1,504 lines · hotspot</span>
+              <h2>ProjectDocumentViewModel.swift</h2>
+              <p>Main-actor application coordinator: published snapshot, panels, async tasks, services, error presentation.</p>
+            </article>
+            <article class="hotspot">
+              <span class="file-size">923 lines · hotspot</span>
+              <h2>ProjectEditorShell.swift</h2>
+              <p>Three-pane editor, toolbar, library, viewer, inspector, fades, thumbnail artwork.</p>
+            </article>
+            <article class="hotspot">
+              <span class="file-size">856 lines · hotspot</span>
+              <h2>SequenceTimelineView.swift</h2>
+              <p>Timeline geometry, scroll bridge, ruler, clips, trim handles, playhead, reorder/drop.</p>
+            </article>
+            <article>
+              <span class="file-size">232 lines</span>
+              <h2>PlaybackCoordinator.swift</h2>
+              <p>AVPlayer lifecycle, off-main composition builds, generation guards, exact seek mapping.</p>
+            </article>
+          </div>
+
+          <div class="bridge-list">
+            <article><strong>NSViewRepresentable</strong><span><code>NativeVideoPlayer</code>, timeline scroll view, window close guard, keyboard monitor</span></article>
+            <article><strong>AppKit panels</strong><span><code>NSOpenPanel</code> and <code>NSSavePanel</code> remain in the main-actor view model</span></article>
+            <article><strong>Published state</strong><span>Views observe <code>private(set)</code> values and call intention-revealing methods</span></article>
+            <article><strong>Generation tokens</strong><span>Stale async rebuilds cannot overwrite newer project state</span></article>
+          </div>
+        </section>
+
+        <section class="chapter" id="swift" data-title="Swift style">
+          <div class="chapter-heading">
+            <span class="kicker">Chapter 07 · House style</span>
+            <h1>Value semantics first.<br><em>Isolation at the edges.</em></h1>
+            <p class="lede">The code favors explicit types and compiler-enforced concurrency over frameworks or clever abstraction. Most dependencies are plain initializers with protocol-typed defaults.</p>
+          </div>
+
+          <div class="pattern-grid">
+            <article class="pattern-card">
+              <span class="pattern-tag">Value model</span>
+              <h2>Structs carry state</h2>
+              <pre><code>public struct TimelineClip:
+  Codable, Equatable,
+  Identifiable, Sendable</code></pre>
+              <p>Codable persists it, Equatable enables snapshots/tests, Sendable permits actor crossings.</p>
+            </article>
+            <article class="pattern-card">
+              <span class="pattern-tag">Typed failures</span>
+              <h2>Errors explain recovery</h2>
+              <pre><code>public enum TimelineEditError:
+  LocalizedError,
+  Equatable, Sendable</code></pre>
+              <p>Cases are assertable in tests; descriptions are directly useful in the UI and diagnostics.</p>
+            </article>
+            <article class="pattern-card">
+              <span class="pattern-tag">Dependency seam</span>
+              <h2>Protocols at I/O boundaries</h2>
+              <pre><code>private let runner:
+  any FFmpegExecuting</code></pre>
+              <p>Production gets a real process runner; tests inject recording, failing, or cancelling fakes.</p>
+            </article>
+            <article class="pattern-card">
+              <span class="pattern-tag">Concurrency</span>
+              <h2>Actors own mutable resources</h2>
+              <pre><code>public actor
+  ProjectDocumentSession</code></pre>
+              <p>Persistence, autosave, cache, and thumbnail services serialize their own mutable state.</p>
+            </article>
+            <article class="pattern-card">
+              <span class="pattern-tag">UI isolation</span>
+              <h2>Main actor publishes</h2>
+              <pre><code>@MainActor final class
+  ProjectDocumentViewModel:
+  ObservableObject</code></pre>
+              <p>Panels, selection, busy flags, and SwiftUI publication stay where macOS expects them.</p>
+            </article>
+            <article class="pattern-card">
+              <span class="pattern-tag">Async freshness</span>
+              <h2>Cancel + generation check</h2>
+              <pre><code>task?.cancel()
+generation = UUID()
+guard current == generation
+  else { return }</code></pre>
+              <p>Old preview/status/export tasks cannot publish over newer user intent.</p>
+            </article>
+          </div>
+
+          <div class="library-grid">
+            <article><strong>SwiftUI + Combine</strong><p>Views, commands, observable application state.</p></article>
+            <article><strong>AppKit</strong><p>Panels, windows, pasteboard, Finder, keyboard and scrolling bridges.</p></article>
+            <article><strong>AVFoundation + AVKit</strong><p>Media inspection, compositions, player, thumbnail decoding.</p></article>
+            <article><strong>CoreMedia</strong><p>Conversion at the boundary of exact rational editing time.</p></article>
+            <article><strong>Foundation</strong><p>Files, JSON, Process, tasks, URLs, dates, diagnostics.</p></article>
+            <article><strong>CryptoKit</strong><p>Deterministic SHA-256 cache keys.</p></article>
+            <article><strong>ImageIO</strong><p>Efficient cached thumbnail image decoding.</p></article>
+            <article><strong>UniformTypeIdentifiers</strong><p><code>.frogmouth</code> project and media file panels.</p></article>
+          </div>
+
+          <aside class="callout">
+            <strong>No third-party Swift dependencies</strong>
+            <p><code>Package.swift</code> declares no packages. FFmpeg is deliberately an external, version-validated executable—not linked into the app. That keeps the Swift graph small but makes process contracts and integration tests essential.</p>
+          </aside>
+        </section>
+
+        <section class="chapter" id="tests" data-title="Testing">
+          <div class="chapter-heading">
+            <span class="kicker">Chapter 08 · Evidence pyramid</span>
+            <h1>Fast invariants below.<br><em>Real media above.</em></h1>
+            <p class="lede">All 110 cases use Apple’s Swift Testing package: free functions annotated with <code>@Test</code>, <code>#expect</code> for assertions, and <code>#require</code> for safe unwrapping.</p>
+          </div>
+
+          <div class="test-filter" role="group" aria-label="Filter test types">
+            <button class="is-active" data-test-filter="all">All layers</button>
+            <button data-test-filter="unit">Pure unit</button>
+            <button data-test-filter="filesystem">Filesystem</button>
+            <button data-test-filter="contract">Contract</button>
+            <button data-test-filter="integration">Integration</button>
+            <button data-test-filter="performance">Performance</button>
+          </div>
+
+          <div class="test-grid" id="test-grid">
+            <article data-test-type="unit">
+              <span class="test-count">logic</span><h2>Exact math &amp; policies</h2>
+              <p>Rational arithmetic, time mapping, viewport geometry, colour compatibility, fade limits, quality policy.</p>
+              <code>ExactTimeTests.swift</code>
+            </article>
+            <article data-test-type="unit">
+              <span class="test-count">state</span><h2>Editing transitions</h2>
+              <p>Commands, validation, trim transaction, split inheritance, history, undo/redo.</p>
+              <code>TimelineEditingTests.swift</code>
+            </article>
+            <article data-test-type="contract">
+              <span class="test-count">schema</span><h2>Golden JSON fixture</h2>
+              <p>Schema-2 project decodes and re-encodes byte-for-byte; future versions and invalid fades are rejected.</p>
+              <code>ProjectDomainTests.swift</code>
+            </article>
+            <article data-test-type="contract">
+              <span class="test-count">argv</span><h2>FFmpeg command contracts</h2>
+              <p>Argument arrays and filter graphs are inspected for quoting, exact ranges, codecs, fades, audio, metadata.</p>
+              <code>TimelineRenderTests.swift</code>
+            </article>
+            <article data-test-type="filesystem">
+              <span class="test-count">I/O</span><h2>Atomicity &amp; cache</h2>
+              <p>Temporary directories prove atomic saves, cleanup, manifest validation, stale detection, output finalization.</p>
+              <code>ProjectPersistenceTests.swift</code>
+            </article>
+            <article data-test-type="filesystem">
+              <span class="test-count">fake</span><h2>Injected failure behavior</h2>
+              <p>Recording runners and stub inspectors simulate reuse, cancellation, corrupt output, and partial failure.</p>
+              <code>ClipStabilizationTests.swift</code>
+            </article>
+            <article data-test-type="integration">
+              <span class="test-count">AV</span><h2>AVFoundation composition</h2>
+              <p>Generated assets verify segment layout, transform, fade ramps, audio tracks, and exact mapping.</p>
+              <code>PlaybackCompositionTests.swift</code>
+            </article>
+            <article data-test-type="integration">
+              <span class="test-count">FFmpeg</span><h2>Rendered media inspection</h2>
+              <p>Fixtures are rendered, ffprobed, and sampled for frame count, duration, luma fades, tone frequencies, silence, and colour.</p>
+              <code>TimelineRenderTests.swift</code>
+            </article>
+            <article data-test-type="integration">
+              <span class="test-count">gate</span><h2>Strict CI prerequisites</h2>
+              <p>Locally, unavailable FFmpeg/media can skip integration paths. CI sets <code>FROGMOUTH_REQUIRE_MEDIA_INTEGRATION=1</code>, turning missing prerequisites into failures.</p>
+              <code>IntegrationTestSupport.swift</code>
+            </article>
+            <article data-test-type="performance">
+              <span class="test-count">50 clips</span><h2>Benchmark executable</h2>
+              <p>Measures JSON, indexing, open/autosave, timeline math, render plans, AV composition, thumbnail cache, memory.</p>
+              <code>FrogmouthBenchmark/main.swift</code>
+            </article>
+          </div>
+
+          <div class="testing-pattern">
+            <div>
+              <span class="kicker">Typical pattern</span>
+              <h2>Arrange with value fixtures, inject the boundary, assert the contract</h2>
+            </div>
+            <pre><code>@Test func cancellingExportLeavesNoFinalFile() async throws {
+    let runner = CancellingFFmpegRunner()
+    let exporter = TimelineExporter(runner: runner)
+
+    await #expect(throws: CancellationError.self) {
+        try await exporter.export(request) { _ in }
+    }
+    #expect(!FileManager.default.fileExists(atPath: destination.path))
+}</code></pre>
+          </div>
+        </section>
+
+        <section class="chapter" id="config" data-title="Configuration">
+          <div class="chapter-heading">
+            <span class="kicker">Chapter 09 · Configuration without a maze</span>
+            <h1>Source-controlled defaults.<br><em>Environment at the seams.</em></h1>
+            <p class="lede">There is no runtime preferences framework yet. Product, build, compatibility, CI, and release settings are intentionally visible in a handful of files.</p>
+          </div>
+
+          <div class="config-grid">
+            <article><span>Package</span><h2>Package.swift</h2><p>Swift tools 6.2, macOS 15, targets, app resource processing. No external packages.</p></article>
+            <article><span>Product</span><h2>VERSION</h2><p>Semantic app version. Build number stays independent and becomes <code>CFBundleVersion</code>.</p></article>
+            <article><span>Compatibility</span><h2>Core constants</h2><p>Project schema 2, cache schema 1, processing revisions, tested FFmpeg 7.1.1 and 8.1.2.</p></article>
+            <article><span>Build</span><h2>scripts/build-app.sh</h2><p>Release compile, bundle assembly, resources, icon, generated Info.plist.</p></article>
+            <article><span>CI</span><h2>.github/workflows/ci.yml</h2><p>Apple-silicon macOS 15, Xcode 26.2, FFmpeg 8.1.2, strict fixtures/tests, app packaging.</p></article>
+            <article><span>Release</span><h2>.github/workflows/release.yml</h2><p>Tag validation, repeat build/test/package, checksums, immutable published assets, draft-first release.</p></article>
+          </div>
+
+          <div class="commands-board">
+            <div class="section-heading"><div><span class="kicker">Daily commands</span><h2>The working set</h2></div></div>
+            <button data-copy="swift test"><code>swift test</code><span>Fast local suite; media-backed tests run when prerequisites exist.</span></button>
+            <button data-copy="FROGMOUTH_REQUIRE_MEDIA_INTEGRATION=1 swift test"><code>FROGMOUTH_REQUIRE_MEDIA_INTEGRATION=1 swift test</code><span>Require all real-media paths.</span></button>
+            <button data-copy="./scripts/build-app.sh"><code>./scripts/build-app.sh</code><span>Build the unsigned app at build/frogmouth.app.</span></button>
+            <button data-copy="swift run -c release frogmouth-benchmark"><code>swift run -c release frogmouth-benchmark</code><span>Run structural and media performance guardrails.</span></button>
+            <button data-copy="./scripts/package-release.sh"><code>./scripts/package-release.sh</code><span>Create verified DMG, ZIP, and SHA-256 manifest.</span></button>
+          </div>
+
+          <div class="environment-table">
+            <div><code>FROGMOUTH_FFMPEG</code><span>Override executable discovery in development/tests.</span></div>
+            <div><code>FROGMOUTH_TEST_FFMPEG_VERSION</code><span>Add the CI-installed version to integration-test acceptance.</span></div>
+            <div><code>FROGMOUTH_REQUIRE_MEDIA_INTEGRATION</code><span>Turn missing FFmpeg or fixtures into test failures.</span></div>
+            <div><code>FROGMOUTH_BUILD_NUMBER</code><span>Override bundle build number; CI uses the workflow run number.</span></div>
+            <div><code>FFMPEG / FFPROBE</code><span>Select tools used by deterministic fixture scripts.</span></div>
+          </div>
+
+          <div class="release-line" aria-label="Release pipeline">
+            <span>PR</span><i>→</i><span>strict CI</span><i>→</i><span>merge</span><i>→</i><span>vX.Y.Z tag</span><i>→</i><span>draft release</span><i>→</i><span>manual verify</span><i>→</i><span>publish</span>
+          </div>
+        </section>
+
+        <section class="chapter" id="contribute" data-title="Change safely">
+          <div class="chapter-heading">
+            <span class="kicker">Chapter 10 · Human + AI operating manual</span>
+            <h1>Know where to cut.<br><em>Know what must remain true.</em></h1>
+            <p class="lede">You do not need to type every line to own the system. Your leverage is choosing the behavior, recognizing the boundary, demanding the right evidence, and reviewing invariants rather than syntax alone.</p>
+          </div>
+
+          <div class="change-router">
+            <label for="change-select">I want to change…</label>
+            <select id="change-select">
+              <option value="editing">timeline editing behavior</option>
+              <option value="ui">editor layout or interaction</option>
+              <option value="preview">preview/playback behavior</option>
+              <option value="export">export encoding or validation</option>
+              <option value="stabilization">stabilization behavior</option>
+              <option value="persistence">project format or autosave</option>
+              <option value="media">import or source compatibility</option>
+              <option value="release">build, CI, or release process</option>
+            </select>
+            <div class="router-result" id="router-result" aria-live="polite"></div>
+          </div>
+
+          <div class="invariant-grid">
+            <article><span>01</span><h2>Sources stay untouched</h2><p>All edits are decisions; generated outputs go to cache, workspace, or an explicit export destination.</p></article>
+            <article><span>02</span><h2>Frames stay exact</h2><p>Use <code>MediaTime</code>, <code>FrameRate</code>, and mapping helpers. Do not make editing decisions with floating-point seconds.</p></article>
+            <article><span>03</span><h2>Durable edits use commands</h2><p>Do not mutate published project state from a view or bypass history/session validation.</p></article>
+            <article><span>04</span><h2>Schema changes are explicit</h2><p>Update schema version, codec/migration behavior, canonical fixture, compatibility test, design docs, and changelog.</p></article>
+            <article><span>05</span><h2>Cache validity is explainable</h2><p>New processing behavior changes its identity/revision; stale results are regenerated rather than silently reused.</p></article>
+            <article><span>06</span><h2>Outputs are inspected</h2><p>A successful process exit is not sufficient. Validate before atomically publishing the file.</p></article>
+          </div>
+
+          <div class="review-checklist">
+            <div>
+              <span class="kicker">Review the AI at the right altitude</span>
+              <h2>Six questions beat a line-by-line syntax audit</h2>
+            </div>
+            <ol>
+              <li><span>1</span><p><strong>Which durable model changed?</strong> If none, why does persistence code move?</p></li>
+              <li><span>2</span><p><strong>Which invariant enforces the behavior?</strong> Look for one central validation point.</p></li>
+              <li><span>3</span><p><strong>What is the cancellation/failure story?</strong> Partial cache or export files must not become truth.</p></li>
+              <li><span>4</span><p><strong>What crosses the main actor?</strong> Heavy inspection, file I/O, composition, and processes should not block UI state.</p></li>
+              <li><span>5</span><p><strong>Which test layer proves it?</strong> Pure logic first; fixture-backed evidence when media behavior changes.</p></li>
+              <li><span>6</span><p><strong>Which compatibility number or document changes?</strong> Schema, cache, processing, FFmpeg, app version, changelog.</p></li>
+            </ol>
+          </div>
+
+          <div class="reading-order">
+            <span class="kicker">Suggested first reading session · about 45 minutes</span>
+            <div>
+              <button data-copy="Package.swift">1 · Package.swift</button>
+              <button data-copy="Sources/FrogmouthCore/ProjectDomain.swift">2 · ProjectDomain</button>
+              <button data-copy="Sources/FrogmouthCore/TimelineEditing.swift">3 · TimelineEditing</button>
+              <button data-copy="Sources/FrogmouthCore/ProjectPersistence.swift">4 · ProjectPersistence</button>
+              <button data-copy="Sources/FrogmouthApp/ProjectDocumentViewModel.swift">5 · DocumentViewModel</button>
+              <button data-copy="Sources/FrogmouthCore/TimelineRenderPlan.swift">6 · RenderPlan</button>
+              <button data-copy="Tests/FrogmouthCoreTests/TimelineRenderTests.swift">7 · RenderTests</button>
+            </div>
+          </div>
+
+          <aside class="finish-card">
+            <img src="../../Sources/FrogmouthApp/Resources/FrogmouthMark.png" alt="" width="80" height="80">
+            <div><span class="kicker">You now have the map</span><h2>Use the code to answer details, not to rediscover the architecture.</h2><p>Return here through the chapter rail, search, or the change router whenever an AI-authored diff touches unfamiliar territory.</p></div>
+          </aside>
+        </section>
+      </main>
+
+      <footer class="deck-controls">
+        <button id="previous-button" aria-label="Previous chapter">← <span>Previous</span></button>
+        <span id="chapter-position">01 / 10</span>
+        <button id="next-button" aria-label="Next chapter"><span>Next</span> →</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="search-dialog">
+    <div class="dialog-heading">
+      <div><span class="kicker">Guide index</span><h2>Search concepts and files</h2></div>
+      <button class="dialog-close" data-close-dialog aria-label="Close search">×</button>
+    </div>
+    <label class="search-field">
+      <span aria-hidden="true">⌕</span>
+      <input id="search-input" type="search" placeholder="Try “autosave”, “FFmpeg”, or “schema”…" autocomplete="off">
+      <kbd>esc</kbd>
+    </label>
+    <div id="search-results" class="search-results"></div>
+  </dialog>
+
+  <dialog id="keyboard-dialog">
+    <div class="dialog-heading">
+      <div><span class="kicker">Keyboard guide</span><h2>Move without the mouse</h2></div>
+      <button class="dialog-close" data-close-dialog aria-label="Close keyboard guide">×</button>
+    </div>
+    <div class="shortcut-grid">
+      <div><kbd>→</kbd><span>Next chapter</span></div>
+      <div><kbd>←</kbd><span>Previous chapter</span></div>
+      <div><kbd>Home</kbd><span>First chapter</span></div>
+      <div><kbd>End</kbd><span>Last chapter</span></div>
+      <div><kbd>/</kbd><span>Search</span></div>
+      <div><kbd>?</kbd><span>This guide</span></div>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
