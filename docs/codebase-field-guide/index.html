@@ -317,6 +317,10 @@
   → ProjectDocumentSession schedules autosave
   → ViewModel publishes one coherent snapshot</code></pre>
               <p>Imports, insertion, split, trim, duplicate, move, delete, stabilization, and fades all use this path. Undo/redo restores validated project snapshots rather than attempting inverse media operations.</p>
+              <aside class="callout">
+                <strong>Command-driven, not command-sourced</strong>
+                <p><code>ProjectCommand</code> gives every edit one validated entry point, but commands are not persisted or replayed. The <code>.frogmouth</code> file stores the latest <code>ProjectState</code>, and undo/redo keeps snapshots only for the current session. A command-sourced system would instead store an append-only command log and reconstruct the project by replaying it.</p>
+              </aside>
             </article>
             <article class="panel">
               <span class="kicker">Trim-specific behavior</span>
