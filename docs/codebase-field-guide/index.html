@@ -226,7 +226,7 @@
               </article>
               <article>
                 <span class="status-dot watch"></span>
-                <div><strong>Three concentration points</strong><p><code>ProjectDocumentViewModel</code> (1,504 lines), <code>ProjectEditorShell</code> (923), and <code>SequenceTimelineView</code> (856) deserve care when features expand.</p></div>
+                <div><strong>Three concentration points</strong><p><code>ProjectDocumentViewModel</code>, <code>ProjectEditorShell</code>, and <code>SequenceTimelineView</code> deserve care when features expand.</p></div>
               </article>
             </div>
           </div>
@@ -417,32 +417,29 @@ change source / tool / algorithm / params
 
           <div class="file-responsibilities">
             <article>
-              <span class="file-size">75 lines</span>
               <h2>FrogmouthApp.swift</h2>
               <p>Composition root, shared objects, macOS command menus, keyboard shortcuts.</p>
             </article>
             <article>
-              <span class="file-size">294 lines</span>
               <h2>RootView.swift</h2>
               <p>FFmpeg gate, startup/editor switch, busy overlays, drop entry point, close guard.</p>
             </article>
             <article class="hotspot">
-              <span class="file-size">1,504 lines · hotspot</span>
+              <span class="file-badge">hotspot</span>
               <h2>ProjectDocumentViewModel.swift</h2>
               <p>Main-actor application coordinator: published snapshot, panels, async tasks, services, error presentation.</p>
             </article>
             <article class="hotspot">
-              <span class="file-size">923 lines · hotspot</span>
+              <span class="file-badge">hotspot</span>
               <h2>ProjectEditorShell.swift</h2>
               <p>Three-pane editor, toolbar, library, viewer, inspector, fades, thumbnail artwork.</p>
             </article>
             <article class="hotspot">
-              <span class="file-size">856 lines · hotspot</span>
+              <span class="file-badge">hotspot</span>
               <h2>SequenceTimelineView.swift</h2>
               <p>Timeline geometry, scroll bridge, ruler, clips, trim handles, playhead, reorder/drop.</p>
             </article>
             <article>
-              <span class="file-size">232 lines</span>
               <h2>PlaybackCoordinator.swift</h2>
               <p>AVPlayer lifecycle, off-main composition builds, generation guards, exact seek mapping.</p>
             </article>
@@ -683,6 +680,7 @@ guard current == generation
             <article><span>04</span><h2>Schema changes are explicit</h2><p>Update schema version, codec/migration behavior, canonical fixture, compatibility test, design docs, and changelog.</p></article>
             <article><span>05</span><h2>Cache validity is explainable</h2><p>New processing behavior changes its identity/revision; stale results are regenerated rather than silently reused.</p></article>
             <article><span>06</span><h2>Outputs are inspected</h2><p>A successful process exit is not sufficient. Validate before atomically publishing the file.</p></article>
+            <article><span>07</span><h2>The guide follows architectural changes</h2><p>Update this guide in the same pull request when subsystem ownership, persistent state, runtime flows, integrations, tests, or development commands change. Prefer stable responsibilities over volatile metrics.</p></article>
           </div>
 
           <div class="review-checklist">
@@ -697,6 +695,7 @@ guard current == generation
               <li><span>4</span><p><strong>What crosses the main actor?</strong> Heavy inspection, file I/O, composition, and processes should not block UI state.</p></li>
               <li><span>5</span><p><strong>Which test layer proves it?</strong> Pure logic first; fixture-backed evidence when media behavior changes.</p></li>
               <li><span>6</span><p><strong>Which compatibility number or document changes?</strong> Schema, cache, processing, FFmpeg, app version, changelog.</p></li>
+              <li><span>7</span><p><strong>Does the codebase guide still describe reality?</strong> Update affected ownership, flow, integration, testing, or command references in the same pull request.</p></li>
             </ol>
           </div>
 

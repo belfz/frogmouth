@@ -114,7 +114,7 @@ code, pre, kbd { font-family: var(--mono); }
   margin: 19px 8px 16px;
   flex-wrap: wrap;
 }
-.rail-meta span, .pattern-tag, .file-size {
+.rail-meta span, .pattern-tag, .file-badge {
   padding: 4px 7px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -652,7 +652,7 @@ pre {
 .file-responsibilities .hotspot { border-color: color-mix(in srgb, var(--yellow) 38%, var(--line)); }
 .file-responsibilities h2 { margin: 22px 0 8px; font: 14px var(--mono); overflow-wrap: anywhere; }
 .file-responsibilities p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
-.hotspot .file-size { color: var(--yellow); }
+.hotspot .file-badge { color: var(--yellow); }
 .bridge-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 28px; }
 .bridge-list article { padding: 16px; border-left: 2px solid var(--rust); background: var(--surface); }
 .bridge-list strong, .bridge-list span { display: block; }

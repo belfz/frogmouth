@@ -30,3 +30,18 @@ Keyboard controls:
 The guide intentionally has no package manager, generated output, external
 assets, analytics, or network requests. Its source references are relative to
 the repository, so it should remain in `docs/codebase-field-guide/`.
+
+## Keeping the guide current
+
+Treat the guide as part of the implementation documentation. Update it in the
+same pull request whenever a change affects:
+
+- subsystem or file responsibilities;
+- persisted project state or editing commands;
+- preview, stabilization, export, or temporary-file flows;
+- framework and external-tool integration;
+- testing strategy, configuration, or development commands.
+
+Prefer stable architectural facts over measurements such as source-file line
+counts, which become stale without improving the mental model. A change that
+does not affect the areas above does not require a guide update.
