@@ -8,6 +8,10 @@
 
 frogmouth is a macOS app for quickly assembling, trimming, splitting, and stabilizing a gapless sequence of video clips, then exporting the complete timeline as a smaller, high-quality HEVC file.
 
+![frogmouth editor showing a video preview, the Media Library, clip inspector, and timeline](docs/screenshots/timeline-editor.png)
+
+The editor brings the Media Library, timeline preview, and clip controls into one window.
+
 Version `1.0.0` is the first stable release. User-visible changes are recorded in
 [CHANGELOG.md](CHANGELOG.md), and the versioning, packaging, and release process
 is documented in [RELEASING.md](RELEASING.md).
