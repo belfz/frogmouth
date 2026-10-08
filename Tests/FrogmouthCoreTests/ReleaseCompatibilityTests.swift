@@ -8,7 +8,7 @@ import Testing
     #expect(CacheManifest.currentSchemaVersion == 1)
     #expect(StabilizationCacheIdentityBuilder.currentProcessingRevision == 1)
     #expect(ThumbnailRequest.processingRevision == 1)
-    #expect(FFmpegLocator.testedVersions == ["7.1.1", "8.1.2"])
+    #expect(FFmpegLocator.testedVersions == ["7.1.1", "8.1.2", "9.0.1"])
 }
 
 @Test func applicationBuildInfoKeepsUserVersionAndBuildIndependent() {
