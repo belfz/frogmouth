@@ -189,8 +189,8 @@ Then open `http://localhost:8000/docs/codebase-field-guide/`. The guide is depen
 
 - macOS 15+ on Apple silicon.
 - Xcode 26 / Swift 6; package manifest currently declares Swift tools 6.2.
-- Externally installed FFmpeg version 7.1.1 or 8.1.2 with `vidstabdetect`, `vidstabtransform`, and `hevc_videotoolbox`. The app verifies the exact executable/capabilities at startup.
-- CI installs `ffmpeg-full` and currently requires FFmpeg 8.1.2 for media integration tests.
+- Externally installed FFmpeg version 7.1.1, 8.1.2, or 9.0.1 with `vidstabdetect`, `vidstabtransform`, and `hevc_videotoolbox`. The app verifies the exact executable/capabilities at startup.
+- CI installs `ffmpeg-full` and currently requires FFmpeg 9.0.1 for media integration tests.
 - GitHub repository: `belfz/frogmouth`; remote is SSH `origin`.
 - GitHub Actions is the CI/release service. No application secrets or environment-variable values are recorded here.
 - Distribution is through GitHub Releases. Current artifacts are unsigned and unnotarized; first launch requires macOS Privacy & Security approval.

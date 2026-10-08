@@ -28,7 +28,7 @@ public protocol FFmpegLocating: Sendable {
 }
 
 public struct FFmpegLocator: FFmpegLocating, @unchecked Sendable {
-    public static let testedVersions: Set<String> = ["7.1.1", "8.1.2"]
+    public static let testedVersions: Set<String> = ["7.1.1", "8.1.2", "9.0.1"]
 
     private let fileManager: FileManager
     private let supportedVersions: Set<String>

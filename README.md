@@ -47,7 +47,7 @@ build is intentionally unsigned and not notarized. After copying frogmouth to
 Applications and attempting to open it, macOS may require you to approve it
 under **System Settings → Privacy & Security → Open Anyway**.
 
-frogmouth requires an external FFmpeg 7.1.1 or 8.1.2 installation containing
+frogmouth requires an external FFmpeg 7.1.1, 8.1.2, or 9.0.1 installation containing
 `vidstabdetect`, `vidstabtransform`, and `hevc_videotoolbox`. The app verifies
 the executable and exact version at startup. Restart frogmouth after installing
 or changing FFmpeg.
@@ -61,7 +61,7 @@ Requirements:
 
 - Apple-silicon Mac running macOS 15 or newer
 - Xcode 26 / Swift 6
-- FFmpeg 7.1.1 or 8.1.2 containing `vidstabdetect`, `vidstabtransform`, and `hevc_videotoolbox`
+- FFmpeg 7.1.1, 8.1.2, or 9.0.1 containing `vidstabdetect`, `vidstabtransform`, and `hevc_videotoolbox`
 
 Open `Package.swift` in Xcode and run the `frogmouth` executable scheme, or use:
 

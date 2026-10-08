@@ -5,6 +5,7 @@ uses product-oriented [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Added support for FFmpeg 9.0.1.
 - initialized project memory (`MEMORY.md` file).
 
 ## [1.0.0] - 2026-07-24

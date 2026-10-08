@@ -44,7 +44,7 @@
       title: "FFmpeg + ffprobe",
       body: "A separately installed and version-validated tool. Frogmouth constructs argument arrays and filter graphs, launches the executable with Foundation Process, parses progress, and supports cancellation.",
       bullets: [
-        "Tested versions: 7.1.1 and 8.1.2.",
+        "Tested versions: 7.1.1, 8.1.2, and 9.0.1.",
         "Required: vidstabdetect, vidstabtransform, hevc_videotoolbox.",
         "Never invoked through a shell string.",
         "Every final export is reinspected before publication."
