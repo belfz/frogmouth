@@ -37,17 +37,16 @@ jobs:
 
       - name: Install FFmpeg integration dependency
         run: |
-          brew install ffmpeg-full
-          ffmpeg_prefix="$(brew --prefix ffmpeg-full)"
-          echo "$ffmpeg_prefix/bin" >> "$GITHUB_PATH"
-          echo "FFMPEG=$ffmpeg_prefix/bin/ffmpeg" >> "$GITHUB_ENV"
-          echo "FFPROBE=$ffmpeg_prefix/bin/ffprobe" >> "$GITHUB_ENV"
-          echo "FROGMOUTH_FFMPEG=$ffmpeg_prefix/bin/ffmpeg" >> "$GITHUB_ENV"
+          brew install pkgconf x264 x265 libvidstab freetype harfbuzz
+          ./scripts/install-ci-ffmpeg.sh
 
       - name: Verify FFmpeg integration dependency
         run: |
           actual_version="$("$FROGMOUTH_FFMPEG" -version | awk 'NR == 1 { print $3 }')"
-          test "$actual_version" = "$FROGMOUTH_TEST_FFMPEG_VERSION"
+          if [[ "$actual_version" != "$FROGMOUTH_TEST_FFMPEG_VERSION" ]]; then
+            echo "Expected FFmpeg $FROGMOUTH_TEST_FFMPEG_VERSION, found $actual_version." >&2
+            exit 1
+          fi
           "$FROGMOUTH_FFMPEG" -hide_banner -filters | grep -F "vidstabdetect"
           "$FROGMOUTH_FFMPEG" -hide_banner -filters | grep -F "vidstabtransform"
           "$FROGMOUTH_FFMPEG" -hide_banner -encoders | grep -F "hevc_videotoolbox"
