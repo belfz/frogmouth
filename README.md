@@ -90,6 +90,9 @@ The artifacts are written to `build/releases`.
 Pull requests and pushes to `main` run the complete suite on a macOS 15 Apple-silicon
 runner. CI generates and verifies deterministic media fixtures, exercises FFmpeg-backed
 integration tests, and builds and validates the unsigned app bundle.
+CI and release builds use `scripts/install-ci-ffmpeg.sh` to compile FFmpeg 8.1.2
+from a source archive with a pinned SHA-256 checksum. Homebrew supplies the build
+libraries, so updates to its `ffmpeg-full` formula cannot change the tested version.
 
 Run the target-scale editor benchmark with:
 

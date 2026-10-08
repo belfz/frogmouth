@@ -17,9 +17,11 @@ Every video frame contains its zero-based frame number. Audio fixtures use a dis
 
 Generation is deterministic in content, timing, stream layout, and metadata for the approved FFmpeg build. Encoded bytes are not promised to remain identical across FFmpeg or codec-library versions.
 
-GitHub Actions installs `ffmpeg-full` and requires these integration tests to run rather
-than silently skipping when a prerequisite is absent. Its separately declared FFmpeg
-version is a test-only allowance; it does not expand the versions accepted by the app.
+GitHub Actions builds the pinned FFmpeg 8.1.2 source archive with
+`scripts/install-ci-ffmpeg.sh`. Homebrew supplies the codec, stabilization, and text
+libraries. CI requires these integration tests to run rather than silently skipping
+when a prerequisite is absent. Its separately declared FFmpeg version is a test-only
+allowance; it does not expand the versions accepted by the app.
 
 ## Project schema fixture
 
